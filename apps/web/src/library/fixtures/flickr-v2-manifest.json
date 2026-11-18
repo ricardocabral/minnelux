@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "revisionId": "00000000-0000-4000-8000-000000000003",
+  "parentRevisionId": "00000000-0000-4000-8000-000000000002",
+  "catalog": {
+    "key": "catalog/{sha256}.json.gz",
+    "expandedSha256": "944f7a5d9d5756b75cf5cabb876a8b03827ef342f883898d0263b1ac2e6ff355"
+  },
+  "textIndex": {
+    "key": "index/text/{sha256}.json.gz",
+    "expandedSha256": "bceaf80e776a499aa709c891cfda454e66739c12f98709781a9bed4fcbac660a"
+  },
+  "tagIndex": {
+    "key": "index/tags/{sha256}.json.gz",
+    "expandedSha256": "5dcb6e573b3a91185e98eef537382846268e72e97a59d13c0dc1809bb9231fdd"
+  },
+  "tokenizerVersion": 1,
+  "indexVersion": 1,
+  "sources": [
+    {
+      "binding": {
+        "label": "other-account",
+        "sourceKey": "other-account"
+      },
+      "state": {
+        "byteLength": 529,
+        "key": "sources/flickr/6f746865722d6163636f756e74/state/7adf00c831e1c4ea4515d84eb1026019916d7b4847442effcd9570745bd26c9a.json.gz",
+        "sha256": "7adf00c831e1c4ea4515d84eb1026019916d7b4847442effcd9570745bd26c9a"
+      }
+    },
+    {
+      "binding": {
+        "label": "sample-account",
+        "sourceKey": "sample-account"
+      },
+      "state": {
+        "key": "sources/flickr/73616d706c652d6163636f756e74/state/{sha256}.json.gz",
+        "expandedSha256": "39cd1b69cb220e8d0114eeaba30bad8c65789dfbf97d5591c39ab0688e09a2c9"
+      }
+    }
+  ],
+  "receipts": [
+    {
+      "committedRevisionId": "00000000-0000-4000-8000-000000000001",
+      "fingerprint": "ac395dd5a5e31b012e37e68901b54d35aedd7169ce3b25d5a9b1b1223799fd2e",
+      "operationId": "import-other-account",
+      "sourceKey": "other-account"
+    },
+    {
+      "committedRevisionId": "00000000-0000-4000-8000-000000000002",
+      "fingerprint": "054cdfddd875d8de08c410b990e0ca4607c4abdd3d1e6d022553610acc731168",
+      "operationId": "import-sample-account",
+      "sourceKey": "sample-account"
+    }
+  ],
+  "libraryReceipts": [
+    {
+      "operationId": "remove-imported-keyword",
+      "fingerprint": "f03d9909bfab4ccbdcc058e3da424fdb74fd5f21feee10c1dd20eb1b80b6bbf7",
+      "committedRevisionId": "00000000-0000-4000-8000-000000000003"
+    }
+  ]
+}

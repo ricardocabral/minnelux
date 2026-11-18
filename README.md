@@ -21,6 +21,8 @@ node spikes/snapshots/serve.mjs
 
 Open the benchmark and select **Run benchmark** to try catalog and search with sample data. [Open localhost](http://127.0.0.1:8782/)
 
+To browse and edit a GCS library, run the [web client](apps/web/README.md).
+
 To import a Flickr account export into a private GCS library, use the [Flickr importer](apps/flickr-import/README.md).
 
 For cloud setup, use a static HTTPS host, a private bucket, and provider sign-in configured for your site's origin. [Google Cloud Storage setup](docs/prod/minnelux-prd.md#google-account-sign-in-and-gcs-access) · [Amazon S3 setup](docs/prod/connect-amazon-s3.md)
