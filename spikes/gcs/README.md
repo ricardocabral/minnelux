@@ -25,6 +25,8 @@ At 11:37 BRT on the same date, one Chrome 157.0.8103.79 run exercised the browse
 
 A second Chrome run at 11:39–11:40 BRT reproduced the result. A separate tab loading the same media route received HTTP 401. After dropping the local session and supplying a token again, the player returned to the saved 72.80-second position. This was a local session reset using the same CLI credential.
 
+The hosted Google Identity Services flow reached Google's account chooser and then the testing-app warning URL. Chrome's consent popup stalled before returning a token. Live Google consent, read-only publication denial, a signed-in user without bucket IAM, actual token expiration, and desktop and mobile Safari playback are still open. Desktop Safari WebDriver reported that remote automation was disabled.
+
 ## Redeploy
 
 Run `firebase deploy --project minnelux --only hosting` from this directory with the Firebase CLI signed in as an authorized project administrator. Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
