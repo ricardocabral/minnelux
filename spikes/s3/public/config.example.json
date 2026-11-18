@@ -1,0 +1,8 @@
+{
+  "region": "us-east-2",
+  "bucket": "replace-with-the-private-bucket-name",
+  "userPoolId": "us-east-2_replace",
+  "identityPoolId": "us-east-2:replace",
+  "clientId": "replace",
+  "cognitoOrigin": "https://replace.auth.us-east-2.amazoncognito.com"
+}
