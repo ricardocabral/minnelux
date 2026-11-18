@@ -342,14 +342,14 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const icon = (name) => '<svg class="symbol" aria-hidden="true"><use href="#i-' + name + '"/></svg>';
-    const media = new Map();
+    const mediaUrls = new Map();
     for (const [key, data] of Object.entries(JSON.parse($('embedded-media').textContent))) {
       const type = key === 'video' ? 'video/mp4' : 'image/jpeg';
       const prefix = 'data:' + type + ';base64,';
       if (typeof data !== 'string' || !data.startsWith(prefix)) continue;
       try {
         const base64 = btoa(atob(data.slice(prefix.length)));
-        if (base64) media.set(key, prefix + encodeURIComponent(base64));
+        if (base64) mediaUrls.set(key, prefix + encodeURIComponent(base64));
       } catch {
         // Invalid base64 leaves the fixture unavailable.
       }
@@ -493,7 +493,7 @@
       tile.querySelector('.caption').textContent = asset.title;
 
       const image = tile.querySelector('img');
-      const preview = media.get(video ? 'poster' : asset.source);
+      const preview = mediaUrls.get(video ? 'poster' : asset.source);
       if (preview && !asset.missingPreview) {
         image.src = preview;
         tile.querySelector('.placeholder').remove();
@@ -595,10 +595,10 @@
       $('viewer-prev').disabled = offset === 0;
       $('viewer-next').disabled = offset === items.length - 1;
       $('viewer-zoom').hidden = asset.kind === 'video';
-      const source = media.get(asset.source);
+      const sourceUrl = mediaUrls.get(asset.source);
       const download = $('viewer-download');
-      download.hidden = !source;
-      if (source) download.href = source;
+      download.hidden = !sourceUrl;
+      if (sourceUrl) download.href = sourceUrl;
       else download.removeAttribute('href');
       download.download = asset.filename;
       $('viewer-tags').replaceChildren(...asset.tags.map((tag) => {
@@ -611,22 +611,22 @@
       }));
       if (!asset.tags.length) $('viewer-tags').textContent = 'Untagged';
 
-      if (!source) {
+      if (!sourceUrl) {
         showMediaError();
       } else if (asset.kind === 'video') {
         const video = document.createElement('video');
         video.controls = true;
         video.playsInline = true;
         video.preload = 'metadata';
-        const poster = media.get('poster');
+        const poster = mediaUrls.get('poster');
         if (poster) video.poster = poster;
-        video.src = source;
+        video.src = sourceUrl;
         video.setAttribute('aria-label', asset.title);
         video.addEventListener('error', showMediaError);
         stage.append(video);
       } else {
         const image = document.createElement('img');
-        image.src = source;
+        image.src = sourceUrl;
         image.alt = asset.title;
         image.addEventListener('error', showMediaError);
         image.addEventListener('dblclick', toggleZoom);
