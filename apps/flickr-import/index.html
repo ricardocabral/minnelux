@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://accounts.google.com; connect-src 'self' https://accounts.google.com https://storage.googleapis.com https://sts.googleapis.com; frame-src https://accounts.google.com; worker-src 'self'; img-src 'self' blob:; media-src blob:; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Minnelux Flickr importer</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="brand">Minnelux</p>
+      <h1>Import from Flickr</h1>
+      <p>Add the ZIP files from your Flickr account export to a private Google Cloud Storage library.</p>
+    </header>
+
+    <section aria-labelledby="storage-heading">
+      <h2 id="storage-heading">Connect private storage</h2>
+      <div class="fields">
+        <label>Bucket <input id="bucket" autocomplete="off" spellcheck="false" placeholder="my-private-bucket"></label>
+        <label>Library prefix <input id="prefix" value="library" autocomplete="off" spellcheck="false"></label>
+        <label class="wide">Google OAuth web client ID <input id="oauth" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <div class="actions">
+        <button id="sign-in" type="button">Sign in to import</button>
+        <button id="read-only" class="secondary" type="button">Sign in to view</button>
+        <button id="disconnect" class="secondary" type="button" hidden>Disconnect</button>
+      </div>
+    </section>
+
+    <section id="source-section" aria-labelledby="source-heading" hidden>
+      <h2 id="source-heading">Select Flickr export</h2>
+      <div class="fields">
+        <label>Flickr source <select id="source"></select></label>
+        <label id="label-field">Source label <input id="label" value="Flickr archive" maxlength="100"></label>
+        <label class="wide">ZIP files <input id="archives" type="file" accept=".zip,application/zip" multiple></label>
+      </div>
+      <div class="actions">
+        <button id="preview" type="button">Preview import</button>
+        <button id="reopen" class="secondary" type="button">View published assets</button>
+      </div>
+    </section>
+
+    <section id="results" aria-labelledby="result-heading" hidden>
+      <h2 id="result-heading">Import preview</h2>
+      <div id="counts" class="stats"></div>
+      <div id="reviews"></div>
+      <button id="publish" type="button" hidden>Publish import</button>
+    </section>
+
+    <p id="status" role="status" aria-live="polite">Connect storage to begin.</p>
+  </main>
+</body>
+</html>
