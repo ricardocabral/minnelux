@@ -362,7 +362,9 @@ button('publish').onclick = () => withSession(async (active) => {
   const context = prepared
   if (!context.publishPlan) {
     status('Preparing originals and previews…')
-    context.publishPlan = (await prepare(context, true)).plan
+    const { plan } = await prepare(context, true)
+    if (session !== active) return
+    context.publishPlan = plan
   }
   status('Uploading and publishing the library revision…')
   recovery = {
@@ -387,6 +389,7 @@ button('publish').onclick = () => withSession(async (active) => {
     clearPreview()
     files.value = ''
     await loadAccounts(active, sourceKey)
+    if (session !== active) return
     status(result.status === 'published' ? 'Import published. You can reopen it from storage.' : 'These files were already imported.')
   } else if (result.status === 'outcomeUnknown') {
     if (result.code === 'expired') {

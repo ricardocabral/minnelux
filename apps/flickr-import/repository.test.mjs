@@ -334,3 +334,15 @@ test('published v1 catalogs reopen with additional optional photo and album fiel
   assert.deepEqual(reopened.tags.find(tag=>tag.id===tagId).album, update.tags[1].album);
   assert.deepEqual([...store.objects.keys()].filter(key=>key.includes('/originals/')), originalWrites);
 });
+
+test('passes the head byte limit to storage and refuses an oversized head from an adapter', async () => {
+  const head = new Blob([' '.repeat(64 * 1024), '{"version":1}']);
+  const store = {
+    async get(key, {maxBytes}) {
+      assert.equal(key, 'library/head.json');
+      assert.equal(maxBytes, 64 * 1024);
+      return {body:head,generation:'3'};
+    },
+  };
+  await assert.rejects(createFlickrRepository(store).listFlickrSources(), {code:'corrupt'});
+});

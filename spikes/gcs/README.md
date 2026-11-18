@@ -41,7 +41,7 @@ The Firebase site serves the probe at `/` and the [Flickr importer](https://minn
 
 ```sh
 stage=$(mktemp -d)
-git archive HEAD apps/flickr-import spikes/gcs | tar -x -C "$stage"
+git archive HEAD apps/flickr-import spikes/flickr spikes/gcs | tar -x -C "$stage"
 (
   cd "$stage/apps/flickr-import" &&
   npm ci &&
