@@ -44,7 +44,7 @@ function tokenize(value) {
     .match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-function createCatalog() {
+function createCatalog(profile) {
   let randomState = SEED;
   const draw = (limit) => {
     randomState ^= randomState << 13;
@@ -117,6 +117,19 @@ function createCatalog() {
       tagIds: [...tagIds],
     };
   });
+
+  if (profile === "long-tail") {
+    const syllables = ["ba", "ce", "di", "fo", "ga", "he", "ji", "ko", "lu", "ma", "ne", "po", "ri", "so", "ta", "zu"];
+    const replaceLastWord = (text) => {
+      const index = draw(45_000);
+      const name = [0, 4, 8, 12].map((shift) => syllables[(index >> shift) & 15]).join("");
+      return text.slice(0, text.lastIndexOf(" ") + 1) + name;
+    };
+    for (const asset of assets) {
+      if (asset.title !== asset.filename && draw(10) < 7) asset.title = replaceLastWord(asset.title);
+      if (asset.description && draw(10) < 7) asset.description = replaceLastWord(asset.description);
+    }
+  }
 
   return { assets, tags };
 }
@@ -254,9 +267,10 @@ function summarize(samples) {
   return { n: sorted.length, p50: percentile(0.5), p95: percentile(0.95) };
 }
 
-async function benchmark(runs) {
+async function benchmark(runs, profile) {
   if (!Number.isInteger(runs) || runs < 1 || runs > 100) throw new Error("Run count must be 1–100");
-  const catalog = createCatalog();
+  if (profile !== "baseline" && profile !== "long-tail") throw new Error("Unknown workload profile");
+  const catalog = createCatalog(profile);
   const expected = queries.map((query) => expectedSearch(catalog, query));
   const browsePage = catalog.assets.toSorted(compareAssets).slice(0, FIRST_PAGE_SIZE).map(({ id }) => id);
   const samples = {
@@ -269,6 +283,7 @@ async function benchmark(runs) {
   };
   let footprint;
   let transfers;
+  let indexTermCount;
 
   for (let iteration = 0; iteration < runs; iteration++) {
     postMessage({ progress: `Sample ${iteration + 1} of ${runs}` });
@@ -333,14 +348,25 @@ async function benchmark(runs) {
       name, { gzipBytes: gzip.byteLength, jsonBytes },
     ]));
     footprint.headAndManifestBytes = revisionBytes;
+    if (iteration === runs - 1) indexTermCount = Object.keys(text).length;
   }
 
+  const languageTerms = new Map();
+  for (const { title, filename, description } of catalog.assets) {
+    for (const term of tokenize(title === filename ? description : `${title} ${description}`)) {
+      languageTerms.set(term, (languageTerms.get(term) ?? 0) + 1);
+    }
+  }
   return {
     browser: navigator.userAgent,
+    profile,
     itemCount: ITEM_COUNT,
     tagCount: Object.keys(catalog.tags).length,
     tagMembershipCount: catalog.assets.reduce((sum, { tagIds }) => sum + tagIds.length, 0),
     videoCount: catalog.assets.filter(({ kind }) => kind === "video").length,
+    indexTermCount,
+    titleAndDescriptionTermCount: languageTerms.size,
+    titleAndDescriptionSingletonCount: [...languageTerms.values()].filter((count) => count === 1).length,
     firstPageSize: FIRST_PAGE_SIZE,
     seed: SEED,
     runs,
@@ -364,9 +390,9 @@ async function benchmark(runs) {
   };
 }
 
-self.addEventListener("message", async ({ data: { runs } }) => {
+self.addEventListener("message", async ({ data: { runs, profile } }) => {
   try {
-    postMessage({ result: await benchmark(runs) });
+    postMessage({ result: await benchmark(runs, profile) });
   } catch (error) {
     postMessage({ error: error.stack ?? String(error) });
   }

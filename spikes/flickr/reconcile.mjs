@@ -127,11 +127,13 @@ export async function reconcile(sourceKey, part, previous) {
       if (distinct > 1) {
         preview.ambiguous.push(sourceId);
       }
-      continue;
     }
 
-    preview[metadata ? "matched" : "mediaOnly"].push(sourceId);
     const existing = previousAssets.get(sourceId);
+    const linkedMedia = media.length === 1 ? media[0] : media.find(({ key }) => key === existing?.originalKey);
+    if (!linkedMedia) continue;
+    if (media.length === 1) preview[metadata ? "matched" : "mediaOnly"].push(sourceId);
+
     // Sidecar album fallback can be withdrawn once we have that album's authoritative membership.
     const rejected = new Set((existing?.provisionalTagIds ?? []).filter((id) => !tagIds.has(id)));
     const applied = new Set((existing?.appliedTagIds ?? []).filter((id) => !rejected.has(id)));
@@ -147,8 +149,8 @@ export async function reconcile(sourceKey, part, previous) {
       ...existing,
       id: identity(sourceKey, "asset", sourceId),
       sourceId,
-      originalKey: media[0].key,
-      mimeType: media[0].mimeType,
+      originalKey: linkedMedia.key,
+      mimeType: linkedMedia.mimeType,
       tagIds: [...active].sort(),
       appliedTagIds: [...applied].sort(),
       provisionalTagIds: provisionalTagIds.sort(),

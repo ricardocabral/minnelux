@@ -18,7 +18,14 @@ const asset = (state, id) => state.assets.find(({ sourceId }) => sourceId === id
 const assetTags = (state, id) =>
   asset(state, id).tagIds.map((tagId) => state.tags.find(({ id }) => id === tagId));
 
-test("metadata-first and media-first converge on the same assets and tags", async () => {
+function* arrivalOrders(parts) {
+  if (parts.length === 0) yield [];
+  for (const [index, part] of parts.entries()) {
+    for (const rest of arrivalOrders(parts.toSpliced(index, 1))) yield [part, ...rest];
+  }
+}
+
+test("all 24 arrival orders converge on the same assets, tags, and final preview", async () => {
   const pending = await ingest(metadataFirst);
   assert.deepEqual(pending.preview.metadataOnly, [ids.photo, ids.video, ids.pending]);
 
@@ -30,12 +37,16 @@ test("metadata-first and media-first converge on the same assets and tags", asyn
   metadataFirstState = await ingest(metadataLater, metadataFirstState);
   metadataFirstState = await ingest(videos, metadataFirstState);
 
-  let mediaFirstState = await ingest(photos, earlyMedia);
-  mediaFirstState = await ingest(metadataLater, mediaFirstState);
-  mediaFirstState = await ingest(metadataFirst, mediaFirstState);
-
-  assert.deepEqual(metadataFirstState.assets, mediaFirstState.assets);
-  assert.deepEqual(metadataFirstState.tags, mediaFirstState.tags);
+  const orders = [...arrivalOrders([metadataFirst, metadataLater, photos, videos])];
+  assert.equal(orders.length, 24);
+  for (const order of orders) {
+    const description = order.map(({ id }) => id).join(" → ");
+    let state;
+    for (const part of order) state = await ingest(part, state);
+    assert.deepEqual(state.assets, metadataFirstState.assets, description);
+    assert.deepEqual(state.tags, metadataFirstState.tags, description);
+    assert.deepEqual(state.preview, metadataFirstState.preview, description);
+  }
   assert.deepEqual(metadataFirstState.preview.matched, [ids.photo, ids.video]);
   assert.deepEqual(metadataFirstState.preview.metadataOnly, [ids.pending]);
   assert.deepEqual(assetTags(metadataFirstState, ids.photo).map(({ kind, title }) => [kind, title]), [
@@ -54,7 +65,7 @@ test("metadata-first and media-first converge on the same assets and tags", asyn
   assert.deepEqual(metadataFirstState.source.albums["1"].photos, [ids.pending, ids.photo]);
 });
 
-test("retry preserves owner edits and removed memberships while applying newly supplied memberships", async () => {
+test("retry after JSON reload preserves owner edits and removed memberships", async () => {
   let state = await ingest(photos, await ingest(metadataFirst));
   const original = asset(state, ids.photo);
   const outdoorAlbum = assetTags(state, ids.photo).find(({ kind, title }) => kind === "album" && title === "Outdoors");
@@ -63,7 +74,16 @@ test("retry preserves owner edits and removed memberships while applying newly s
   original.description = "";
   original.tagIds = original.tagIds.filter((tagId) => tagId !== outdoorAlbum.id);
 
-  state = await ingest(metadataLater, structuredClone(state));
+  const originals = new Map();
+  for (const media of Object.values(state.source.media)) {
+    originals.set(media.key, await media.bytes.arrayBuffer());
+  }
+  const record = JSON.stringify(state, (key, value) => key === "bytes" ? undefined : value);
+  const reopened = JSON.parse(record);
+  for (const media of Object.values(reopened.source.media)) {
+    media.bytes = new Blob([originals.get(media.key)]);
+  }
+  state = await ingest(metadataLater, reopened);
   state = await ingest(photos, await ingest(metadataFirst, state));
   assert.equal(asset(state, ids.photo).id, original.id);
   assert.equal(asset(state, ids.photo).title, "Owner title");
@@ -73,6 +93,31 @@ test("retry preserves owner edits and removed memberships while applying newly s
     ["keyword", "Outdoors"],
   ]);
   assert.deepEqual(state.preview.duplicates, []);
+  assert.equal(Object.keys(state.source.media).length, 1);
+  assert.deepEqual(await state.source.media[original.originalKey].bytes.arrayBuffer(), await photo.arrayBuffer());
+});
+
+test("later duplicate and conflicting candidates preserve a linked asset and owner edit", async () => {
+  const accepted = await ingest(photos, await ingest(metadataFirst));
+  const original = asset(accepted, ids.photo);
+  original.title = "Owner title";
+
+  for (const [bytes, issue] of [[photo, "duplicates"], [video, "ambiguous"]]) {
+    const incoming = {
+      ...metadataLater,
+      media: [{ name: `second_${ids.photo}_o.jpg`, bytes }],
+    };
+    const state = await ingest(incoming, accepted);
+    assert.deepEqual(state.preview[issue], [ids.photo]);
+    assert.deepEqual(state.preview.matched, []);
+    assert.equal(state.assets.length, 1);
+    const linked = asset(state, ids.photo);
+    assert.equal(linked.id, original.id);
+    assert.equal(linked.originalKey, original.originalKey);
+    assert.equal(linked.mimeType, "image/jpeg");
+    assert.equal(linked.title, "Owner title");
+    assert.ok(assetTags(state, ids.photo).some(({ title }) => title === "Weekend"));
+  }
 });
 
 test("ambiguous media, byte duplicates, filename mismatches and unsupported payloads surface for review", async () => {
@@ -84,12 +129,12 @@ test("ambiguous media, byte duplicates, filename mismatches and unsupported payl
     id: "exceptions",
     sidecars: [{ name: mismatched, json: { id: ids.photo } }],
     media: [
+      ...photos.media,
       { name: same, bytes: photo },
       { name: ambiguous, bytes: photo },
       { name: malformed, bytes: new Blob(["not a JPEG"]) },
     ],
   });
-  state = await ingest(photos, state);
 
   assert.deepEqual(state.preview.duplicates, [ids.photo]);
   assert.deepEqual(state.preview.ambiguous, [ambiguous]);
@@ -102,6 +147,7 @@ test("ambiguous media, byte duplicates, filename mismatches and unsupported payl
     media: [{ name: same, bytes: video }],
   }, state);
   assert.ok(state.preview.ambiguous.includes(ids.photo));
+  assert.equal(asset(state, ids.photo), undefined);
 });
 
 test("the same Flickr ID cannot link assets across source accounts", async () => {

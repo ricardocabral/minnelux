@@ -30,7 +30,10 @@
       });
       worker.addEventListener("error", ({ message }) => finish("error", message));
       delete result.dataset.state;
-      worker.postMessage({ runs: Number(parameters.get("runs") ?? 20) });
+      worker.postMessage({
+        runs: Number(parameters.get("runs") ?? 20),
+        profile: parameters.get("profile") ?? "baseline",
+      });
     });
     if (parameters.has("auto")) button.click();
   </script>
