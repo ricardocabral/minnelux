@@ -25,7 +25,15 @@ At 11:37 BRT on the same date, one Chrome 157.0.8103.79 run exercised the browse
 
 A second Chrome run at 11:39–11:40 BRT reproduced the result. A separate tab loading the same media route received HTTP 401. After dropping the local session and supplying a token again, the player returned to the saved 72.80-second position. This was a local session reset using the same CLI credential.
 
-The hosted Google Identity Services flow reached Google's account chooser and then the testing-app warning URL. Chrome's consent popup stalled before returning a token. Live Google consent, read-only publication denial, a signed-in user without bucket IAM, actual token expiration, and desktop and mobile Safari playback are still open. Desktop Safari WebDriver reported that remote automation was disabled.
+## Hosted Chrome results
+
+On November 18, 2026, at 12:02 BRT, Chrome 157.0.8103.79 on `https://minnelux.web.app/` received the Google Identity Services `devstorage.read_write` scope for the allowlisted Gmail account. One run decoded the private JPEG, uploaded two snapshots, created and conditionally updated the head with HTTP 200, and rejected a stale update with HTTP 412. A separate Cloud Storage read confirmed the head still pointed to `r2`.
+
+At 12:09 BRT, a separate tab received `devstorage.read_only`. Its private JPEG read returned HTTP 200 and its publication attempt returned HTTP 403. In one play-and-seek run, the worker received HTTP 206 responses with readable range headers. After the seek, a new range started at byte 18,022,400. Playback resumed at 72.00 seconds after the worker reported streaming 7,123,755 of 27,745,984 bytes. The seek began after 4,274,585 bytes. At 12:10 BRT the player returned to the saved 94.18-second position after clearing the local session and signing in again with Google.
+
+On the first consent attempt the popup closed before the page received a token. For both scopes a subsequent request returned a token after consent had been recorded. If the page reports a closed popup after consent, select the same sign-in button again.
+
+Actual token expiration, a signed-in user without bucket IAM, and desktop and mobile Safari playback remain open. Desktop Safari 26.2 loaded the deployed page, but browser automation did not complete the Google popup flow. Safari WebDriver reports that remote automation is disabled.
 
 ## Redeploy
 

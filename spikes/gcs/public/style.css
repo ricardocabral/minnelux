@@ -10,4 +10,4 @@ input, button { font: inherit; padding: 0.4em 0.65em; }
 .buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 img, video { display: block; max-width: 100%; margin-top: 1rem; }
 [hidden] { display: none; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+#evidence { font-family: ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

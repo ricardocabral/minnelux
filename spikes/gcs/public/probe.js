@@ -18,7 +18,9 @@ let received = new Map();
 let expiryTimer;
 
 function log(message) {
-  evidence.textContent += `${new Date().toISOString().slice(11, 23)} ${message}\n`;
+  const line = document.createElement('div');
+  line.textContent = `${new Date().toISOString().slice(11, 23)} ${message}\n`;
+  evidence.append(line);
 }
 
 function run(selector, action) {
@@ -95,18 +97,46 @@ form.addEventListener('submit', (event) => {
     const bucket = currentBucket();
     const access = event.submitter?.value ?? 'read';
     const scope = scopePrefix + (access === 'write' ? 'read_write' : 'read_only');
-    const reportFailure = () => log('Google authorization did not return the requested storage scope.');
+    const reportFailure = (message) => {
+      if (!session) sessionLabel.textContent = message;
+      log(message);
+    };
     identity.initTokenClient({
       client_id: form.elements.client.value.trim(),
       scope,
       include_granted_scopes: false,
-      error_callback: reportFailure,
+      error_callback: ({ type }) => {
+        if (type === 'popup_failed_to_open') {
+          reportFailure('The browser blocked the Google sign-in popup.');
+        } else if (type === 'popup_closed') {
+          reportFailure('Google sign-in closed before returning a token. If you accepted the permission, select the same sign-in button again.');
+        } else {
+          reportFailure('Google sign-in failed before returning an OAuth response.');
+        }
+      },
       callback: (response) => {
+        if (response.error) {
+          const errors = ['access_denied', 'interaction_required', 'login_required', 'consent_required',
+            'invalid_request', 'invalid_scope', 'unauthorized_client', 'server_error', 'temporarily_unavailable'];
+          reportFailure(errors.includes(response.error) ? `Google OAuth returned ${response.error}.` : 'Google OAuth returned an error.');
+          return;
+        }
         const scopes = response.scope?.split(/\s+/) ?? [];
         const lifetime = Number(response.expires_in);
-        if (!response.access_token || !scopes.includes(scope) || !Number.isFinite(lifetime) || lifetime <= 0
-          || (access === 'read' && scopes.some((value) => value.startsWith(scopePrefix) && value !== scope))) {
-          reportFailure();
+        if (!response.access_token) {
+          reportFailure('Google OAuth returned a response without an access token.');
+          return;
+        }
+        if (!scopes.includes(scope)) {
+          reportFailure(`Google OAuth did not grant ${scope}. Review the Cloud Storage permission in the Google dialog.`);
+          return;
+        }
+        if (access === 'read' && scopes.some((value) => value.startsWith(scopePrefix) && value !== scope)) {
+          reportFailure('Google OAuth returned a broader storage scope than requested for reading.');
+          return;
+        }
+        if (!Number.isFinite(lifetime) || lifetime <= 0) {
+          reportFailure('Google OAuth did not return a valid token lifetime.');
           return;
         }
         if (session && session.bucket !== bucket) loseSession('Changed bucket');
