@@ -15,6 +15,14 @@ The private test bucket is `minnelux-browser-proof-703092535958` in the `minnelu
 
 The dedicated video route is scoped to the requesting tab and its registered video. A second tab opening the same route receives a denial. The worker requests capped ranges when the player requests an open-ended range. It forwards the upstream partial response as a stream and reports the bytes that traverse the worker. Browser developer tools can provide independent network evidence.
 
+## Provider baseline
+
+On November 18, 2026, Chromium 159.0.8154.6 loaded the deployed HTTPS page and one signed-out Cloud Storage JSON API JPEG request returned HTTP 401. A separate authenticated JSON API request with `Origin: https://minnelux.web.app` and `Range: bytes=100000-100099` returned HTTP 206, `Content-Range: bytes 100000-100099/27745984`, and `Content-Length: 100`. JavaScript can read `Content-Range` through the exposed response headers. The same range without authorization returned HTTP 401. Two OPTIONS requests confirmed the JSON API allows `authorization,range` for media GET and `authorization,content-type` for conditional upload POST. These provider probes used a CLI credential for the authorized request.
+
+At 11:37 BRT on the same date, one Chrome 157.0.8103.79 run exercised the browser code on loopback against the real private bucket with a CLI access token supplied in memory. The JPEG decoded at 800 × 450. Both snapshot uploads and both conditional head writes returned HTTP 200. The stale update returned HTTP 412, and the browser reopened revision `r2`. The player sought to 72 seconds and resumed playback after the worker reported streaming 2,929,440 of 27,745,984 bytes. GCS returned HTTP 206 for a new range starting at byte 18,022,400 after the seek. This run verified transport and player behavior. It used a test token callback in place of Google Identity Services.
+
+A second Chrome run at 11:39–11:40 BRT reproduced the result. A separate tab loading the same media route received HTTP 401. After dropping the local session and supplying a token again, the player returned to the saved 72.80-second position. This was a local session reset using the same CLI credential.
+
 ## Redeploy
 
 Run `firebase deploy --project minnelux --only hosting` from this directory with the Firebase CLI signed in as an authorized project administrator. Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
