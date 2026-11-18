@@ -1,7 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation } from 'react-router'
-import type { ConnectConfiguration, LibraryClient, LibraryOverview } from '../library/worker-contract.ts'
+import type { LibraryClient, LibraryOverview } from '../library/worker-contract.ts'
 import type { Query } from '../search/contract.ts'
+import type { ConnectionSettings } from '../storage/connection.ts'
 import {
   CollectionNavigation, FiltersSheet, GalleryResults, allMedia, emptyFilters, galleryQuery, libraryRoute,
   type Filters, type Scope,
@@ -18,45 +19,60 @@ type AppProps = {
   checkingConnection?: boolean
   durable?: boolean
   onRetrySignOut?: () => void
-  onConnect?: (configuration: ConnectConfiguration) => Promise<void>
+  onConnect?: (configuration: ConnectionSettings) => Promise<void>
+  onCancelConnect?: () => void
   onOpenFixture?: () => void
   onDisconnect?: () => void
 }
 
-export default function AppView({ client, isFixture, connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onOpenFixture, onDisconnect }: AppProps) {
+type ConnectionFeedback = { text: string; role: 'status' | 'alert' }
+const connectionMessages = new Map<string, ConnectionFeedback>([
+  ['signInReady', { text: 'Google sign-in is ready. Select Connect again.', role: 'status' }],
+  ['signInUnavailable', { text: 'Google sign-in could not load. Try again.', role: 'alert' }],
+  ['popupBlocked', { text: 'Allow the Cognito sign-in pop-up and try again.', role: 'alert' }],
+  ['signInTimeout', { text: 'Cognito sign-in timed out. Try again.', role: 'alert' }],
+  ['invalidBucket', { text: 'Enter a valid S3 bucket name.', role: 'alert' }],
+])
+
+export default function AppView({ client, isFixture, connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onCancelConnect, onOpenFixture, onDisconnect }: AppProps) {
   return client ? <ConnectedLibrary client={client} isFixture={isFixture} onDisconnect={onDisconnect} />
     : <Connect connectionNotice={connectionNotice} checkingConnection={checkingConnection} durable={durable}
-      onRetrySignOut={onRetrySignOut} onConnect={onConnect} onOpenFixture={onOpenFixture} />
+      onRetrySignOut={onRetrySignOut} onConnect={onConnect} onCancelConnect={onCancelConnect} onOpenFixture={onOpenFixture} />
 }
 
-function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onOpenFixture }:
-  Pick<AppProps, 'connectionNotice' | 'checkingConnection' | 'durable' | 'onRetrySignOut' | 'onConnect' | 'onOpenFixture'>) {
+function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onCancelConnect, onOpenFixture }: Pick<AppProps,
+  'connectionNotice' | 'checkingConnection' | 'durable' | 'onRetrySignOut' | 'onConnect' | 'onCancelConnect' | 'onOpenFixture'
+>) {
   const { pathname } = useLocation()
+  const [provider, setProvider] = useState<ConnectionSettings['provider']>('gcs')
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<{ text: string; role: 'status' | 'alert' }>()
+  const providerName = provider === 'gcs' ? 'Google Cloud Storage' : 'Amazon S3'
+  const [feedback, setFeedback] = useState<ConnectionFeedback>()
 
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!onConnect || pending) return
     const fields = new FormData(event.currentTarget)
+    const setting = (name: string) => String(fields.get(name) ?? '').trim()
+    const location = { bucket: setting('bucket'), prefix: setting('prefix') }
     setPending(true)
     setFeedback(undefined)
     try {
-      await onConnect({
-        bucket: String(fields.get('bucket') ?? '').trim(),
-        clientId: String(fields.get('clientId') ?? '').trim(),
-        prefix: String(fields.get('prefix') ?? '').trim(),
+      await onConnect(provider === 'gcs' ? {
+        ...location, provider, clientId: setting('googleClientId'),
         access: fields.get('access') === 'edit' ? 'edit' : 'read',
+      } : {
+        ...location, provider, region: setting('region'), cognitoOrigin: setting('cognitoOrigin'),
+        clientId: setting('cognitoClientId'), userPoolId: setting('userPoolId'),
+        identityPoolId: setting('identityPoolId'), editorGroup: setting('editorGroup') || undefined,
       })
     } catch (error) {
-      const code = error instanceof Error && 'code' in error ? error.code : error instanceof Error ? error.message : error
-      if (code === 'signInReady') {
-        setFeedback({ text: 'Google sign-in is ready. Select Connect again.', role: 'status' })
-      } else {
-        const text = code === 'signInUnavailable' ? 'Google sign-in could not load. Try again.'
-          : libraryError(error, 'The Google Cloud Storage connection failed. Check the configuration and try again.')
-        setFeedback({ text, role: 'alert' })
-      }
+      const code = error instanceof Error && 'code' in error ? error.code : undefined
+      const message = typeof code === 'string' ? connectionMessages.get(code) : undefined
+      setFeedback(message ?? {
+        text: libraryError(error, `The ${providerName} connection failed. Check the configuration and try again.`),
+        role: 'alert',
+      })
     } finally {
       setPending(false)
     }
@@ -71,22 +87,41 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
       {checkingConnection ? (!connectionNotice ? <p role="status">Checking for a saved connection…</p> : null)
       : onRetrySignOut ? <button type="button" className="control primary" onClick={onRetrySignOut}>Retry sign-out</button>
       : onConnect ? <>
-        <p>Connect to the Google Cloud Storage bucket that holds your Minnelux library.</p>
         <form className="connect-form" onSubmit={event => void connect(event)} aria-busy={pending}>
+          {durable ? null : <label>Storage provider
+            <select value={provider} disabled={pending} onChange={event => {
+              setProvider(event.target.value === 's3' ? 's3' : 'gcs')
+              setFeedback(undefined)
+            }}>
+              <option value="gcs">Google Cloud Storage</option>
+              <option value="s3">Amazon S3</option>
+            </select>
+          </label>}
           <label>Bucket name <input name="bucket" required autoComplete="off" disabled={pending} /></label>
           <label>Library prefix <input name="prefix" autoComplete="off" disabled={pending} /></label>
-          {!durable ? <label>Google OAuth client ID <input name="clientId" required autoComplete="off" disabled={pending} /></label> : null}
-          <label>Access
-            <select name="access" disabled={pending}>
-              <option value="read">Read only</option>
-              <option value="edit">Read and edit</option>
-            </select>
-          </label>
-          <button type="submit" className="control primary" disabled={pending}>Connect to Google Cloud Storage</button>
-          {pending ? <p role="status">Connecting to Google Cloud Storage…</p> : null}
+          {provider === 'gcs' ? <>
+            {durable ? null : <label>Google OAuth client ID <input key="googleClientId" name="googleClientId" required autoComplete="off" disabled={pending} /></label>}
+            <label>Access
+              <select name="access" disabled={pending}>
+                <option value="read">Read only</option>
+                <option value="edit">Read and edit</option>
+              </select>
+            </label>
+          </> : <>
+            <label>AWS region <input name="region" required autoComplete="off" disabled={pending} /></label>
+            <label>Cognito managed login URL <input name="cognitoOrigin" type="url" required autoComplete="off" disabled={pending} /></label>
+            <label>Cognito app client ID <input name="cognitoClientId" required autoComplete="off" disabled={pending} /></label>
+            <label>Cognito user pool ID <input name="userPoolId" required autoComplete="off" disabled={pending} /></label>
+            <label>Cognito identity pool ID <input name="identityPoolId" required autoComplete="off" disabled={pending} /></label>
+            <label>Cognito editor group <input name="editorGroup" placeholder="writers" autoComplete="off" disabled={pending} /></label>
+          </>}
+          <button type="submit" className="control primary" disabled={pending}>Connect to {providerName}</button>
+          {pending ? <p role="status">Connecting to {providerName}…</p> : null}
+          {pending && provider === 's3' && onCancelConnect ?
+            <button type="button" className="control" onClick={onCancelConnect}>Cancel sign-in</button> : null}
           {feedback ? <p role={feedback.role} className={feedback.role === 'alert' ? 'form-error' : undefined}>{feedback.text}</p> : null}
         </form>
-      </> : <p>A Google Cloud Storage connection is unavailable in this build.</p>}
+      </> : <p>Storage connections are unavailable in this build.</p>}
       {onOpenFixture && !checkingConnection && !onRetrySignOut ? <div className="connect-footer">
         <button type="button" className={onConnect ? 'control' : 'control primary'} onClick={onOpenFixture} disabled={pending}>
           Open sample library

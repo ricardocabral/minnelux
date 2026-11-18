@@ -64,6 +64,8 @@ test('reopens a private gallery after reload and clears the durable connection o
       })
     })
     await page.goto(origin + '/web/')
+    await expect(page.getByLabel('Storage provider')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Connect to Amazon S3' })).toHaveCount(0)
     await page.getByLabel('Bucket name').fill('sample-bucket')
     await page.getByLabel('Library prefix').fill('library')
     await expect(page.getByLabel('Google OAuth client ID')).toHaveCount(0)

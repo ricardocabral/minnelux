@@ -15,6 +15,14 @@ and search for the photo. Use a separate test library during this stage. The
 web client writes v2 manifests, and the standalone Flickr importer opens
 v1 manifests. [GCS setup](../../docs/prod/minnelux-prd.md#google-account-sign-in-and-gcs-access)
 
+For the Amazon S3 photo workflow, use the regular static build. Choose
+**Amazon S3** on the connection screen and follow the
+[Cognito and S3 setup guide](../../docs/prod/connect-amazon-s3.md).
+Use a separate test bucket and synthetic photos. Register the exact deployed
+`cognito-callback.html` URL, including the app's base path. For local development,
+run `npm run dev -- --host localhost` and register
+`http://localhost:5173/cognito-callback.html` if Vite uses port 5173.
+
 ```sh
 npm run check
 npm test
@@ -23,10 +31,11 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Browser tests use a local fixture endpoint and synthetic photos. The regular
-build outputs a static site in `dist/`. The browser tests build in
-`dist-test/` and start a local fixture server. Hosted provider and private video checks are tracked
-in the [implementation plan](../../plans/web-client.md).
+Browser tests use synthetic photos and local fixtures, including simulated
+Cognito and S3 responses through the real browser SDK. The regular build writes
+the static site to `dist/`. The browser tests build in `dist-test/` and start a
+local fixture server. The [implementation plan](../../plans/web-client.md)
+tracks real provider and private video verification.
 
 ## Stay connected across reloads
 

@@ -1,5 +1,5 @@
 import { relativeKey } from '../library/catalog.ts'
-import type { ConnectConfiguration } from '../library/worker-contract.ts'
+import type { ConnectionSettings } from './connection.ts'
 import { record } from './io.ts'
 
 const endpoint = '/api/minnelux-session/'
@@ -34,7 +34,7 @@ export async function resumeDurableSession() {
   }
 }
 
-export async function startDurableSession({ bucket, prefix, access }: ConnectConfiguration) {
+export async function startDurableSession({ bucket, prefix, access }: Pick<Extract<ConnectionSettings, { provider: 'gcs' }>, 'bucket' | 'prefix' | 'access'>) {
   const response = await post('start', { bucket, prefix, access })
   if (!response.ok) throw new Error('Google sign-in could not start')
   const { authorizationUrl } = await response.json()
