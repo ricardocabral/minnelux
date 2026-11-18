@@ -37,11 +37,14 @@ Actual token expiration, a signed-in user without bucket IAM, and desktop and mo
 
 ## Redeploy
 
-Firebase Hosting replaces the site's complete file set on each deploy. Stage the probe at `/`, the [Flickr importer](https://minnelux.web.app/flickr-import/) at `/flickr-import/`, and the static web client at `/web/`. Identify the intended commit and verify every route's files and headers before deploying. Run from the repository root with Node.js 24 or later and the Firebase CLI signed in as a project administrator.
+Firebase Hosting replaces the site's complete file set on each deploy. Stage the probe at `/`, the [Flickr importer](https://minnelux.web.app/flickr-import/) at `/flickr-import/`, and the static web client at `/web/`. Choose the intended importer and probe revision. The shared site uses a GCS-only web build, so choose its revision separately. The example pins the last default-branch commit before the S3 connector. Verify every route's files and headers before deploying. Run from the repository root with Node.js 24 or later and the Firebase CLI signed in as a project administrator.
 
 ```sh
 stage=$(mktemp -d)
-git archive HEAD apps/flickr-import apps/web docs/mkt/logo spikes/flickr spikes/gcs | tar -x -C "$stage" &&
+web_ref=fb380709396ca4e7d98e94d217b81dc6953b71c6
+mkdir -p "$stage/web-source" &&
+git archive HEAD apps/flickr-import spikes/flickr spikes/gcs | tar -x -C "$stage" &&
+git archive "$web_ref" apps/flickr-import apps/web docs/mkt/logo | tar -x -C "$stage/web-source" &&
 (
   cd "$stage/apps/flickr-import" &&
   npm ci &&
@@ -49,15 +52,15 @@ git archive HEAD apps/flickr-import apps/web docs/mkt/logo spikes/flickr spikes/
   npm run build
 ) &&
 (
-  cd "$stage/apps/web" &&
+  cd "$stage/web-source/apps/web" &&
   npm ci &&
   npm run build
 ) &&
 cp -R "$stage/apps/flickr-import/dist" "$stage/spikes/gcs/public/flickr-import" &&
-cp -R "$stage/apps/web/dist" "$stage/spikes/gcs/public/web"
+cp -R "$stage/web-source/apps/web/dist" "$stage/spikes/gcs/public/web"
 ```
 
-For the static GCS web client, add this entry to `hosting.headers` in the staged `firebase.json`. Keep the existing rules for the probe, importer, and shared headers. For an S3 deployment, configure the bucket and Cognito endpoints. [S3 browser access](../../docs/prod/connect-amazon-s3.md#configure-browser-access)
+For the static GCS web client, add this entry to `hosting.headers` in the staged `firebase.json`. Keep the existing rules for the probe, importer, and shared headers. Before staging a web build that offers Amazon S3, configure its bucket and Cognito endpoints and verify connections to both providers. [S3 browser access](../../docs/prod/connect-amazon-s3.md#configure-browser-access)
 
 ```json
 {
