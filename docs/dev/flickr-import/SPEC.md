@@ -55,6 +55,8 @@ Key an album tag by source account and album ID. Key keyword tags in a separate 
 
 ## Browser and storage architecture
 
+The versioned [importer and library repository contract](REPOSITORY-CONTRACT.md) defines the shared operations, durable records, and publication outcomes used by both implementations.
+
 | Component | Responsibility |
 | --- | --- |
 | Import UI | Selects local ZIPs and a source account, displays the preview, supports review or deferral, and shows progress and failures. |
