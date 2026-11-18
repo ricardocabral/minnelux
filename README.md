@@ -5,6 +5,12 @@
 
 Minnelux is a self-hosted web app for browsing, searching, and organizing media in private cloud storage you control. It keeps your originals and the library catalog in your bucket.
 
+The standard app runs entirely in your browser. Self-hosting requires only static HTTPS file hosting for the app and a private cloud bucket for the library.
+
+- **Privacy.** Your browser connects directly to your storage and identity provider.
+- **Preservation.** Organize your library with tags while keeping the original files intact.
+- **Portability.** Keep the catalog and search index with your media so you can reopen the library in another browser or move it to another storage provider.
+
 ## Tutorial
 
 - [Explore a sample library](docs/prod/first-library.md) to browse a Flickr album, inspect photo details, and find a photo by name without a cloud account.
@@ -24,6 +30,6 @@ Minnelux is a self-hosted web app for browsing, searching, and organizing media 
 
 ## Explanation
 
-- [How the browser, identity provider, and private storage work together](docs/prod/minnelux-prd.md#3-browser-architecture)
+- [How Minnelux connects to storage and keeps a library](docs/prod/architecture.md)
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
