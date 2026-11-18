@@ -1,27 +1,33 @@
 # Connect a private Amazon S3 library
 
-Use a private test bucket and synthetic photos to try the Amazon S3 photo workflow. The bucket owner configures AWS once. Library users sign in through Amazon Cognito with the identities the owner grants access to.
+Use the self-hosted static web build to connect through Cognito. Use the optional session server for Google libraries. [Static web build instructions](../../apps/web/README.md#self-host-the-web-client)
 
 ## Set up the bucket and sign-in
 
-1. Deploy Minnelux on a dedicated HTTPS origin. Create a private general-purpose S3 bucket in your chosen region, enable all S3 Block Public Access settings, and choose the library prefix. Grant read access to any separate prefix containing existing media. [S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
-2. Set up a Cognito user pool with managed login and a public app client without a client secret. Enable the authorization code grant and the `openid` scope. Minnelux uses PKCE for this flow. Use the AWS-provided Cognito domain in the bucket region. Register the exact deployed callback URL, such as `https://photos.example/minnelux/cognito-callback.html`. Provision the users who should open the library. [Cognito authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html)
-3. Register that app client with a Cognito identity pool and disable unauthenticated access. Map the intended users or groups to viewer and editor IAM roles. Put editors in the Cognito group entered in the app connection form. The default group is `writers`. Trust only the intended identity pool and authenticated identities. Give the default role zero S3 permissions, or deny unmapped identities. [Cognito role mapping](https://docs.aws.amazon.com/cognito/latest/developerguide/role-based-access-control.html)
-4. Restrict `s3:ListBucket` on the bucket by prefix and scope `s3:GetObject` to the permitted keys. Viewers need those read permissions. Editors also need conditional `s3:PutObject` on library keys. Require create-only writes for immutable objects and allow conditional replacement only for the head. Protect existing originals and keep deletion, recovery, and backup privileges with separate administrative roles. [S3 policy conditions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/amazon-s3-policy-keys.html) · [Enforcing conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html)
+1. [Deploy the web client](../../apps/web/README.md#self-host-the-web-client) on HTTPS. Create a private general-purpose S3 bucket, enable all Block Public Access settings, and choose a library prefix. Use a test bucket and synthetic photos for the first connection. [S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
+2. In the bucket region, set up a Cognito user pool with an AWS-provided managed-login domain and a public app client without a secret. Enable the authorization code grant and the `openid` scope. Register the exact callback URL, including any app subpath, such as `https://photos.example.com/web/cognito-callback.html`. For local development, use `http://localhost:5173/cognito-callback.html` if Vite uses port 5173. Provision the users who need access. [Cognito authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html)
+3. Register the app client with a Cognito identity pool in the same region and disable unauthenticated access. Map users or groups to viewer and editor IAM roles. Put editors in the group entered in the app, which defaults to `writers`. Trust only the intended pool and authenticated identities. Deny unmapped identities or assign them a role with zero S3 permissions. [Cognito role mapping](https://docs.aws.amazon.com/cognito/latest/developerguide/role-based-access-control.html)
+4. Scope `s3:ListBucket` to the library prefix and `s3:GetObject` to its keys. Editors also need conditional `s3:PutObject`. Require `If-None-Match: *` for immutable objects. Allow `If-None-Match: *` to create `head.json` and `If-Match` to replace it. Keep delete and recovery privileges with administrative roles. [S3 policy conditions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/amazon-s3-policy-keys.html) · [Enforce conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html)
 
 ## Configure browser access
 
-Set bucket CORS to your exact Minnelux origin. For listing, reading, and single PUT uploads, allow `GET`, `HEAD`, and `PUT`. Allow `Authorization`, `Content-Type`, `Range`, `If-Match`, `If-None-Match`, `x-amz-*`, `amz-sdk-invocation-id`, and `amz-sdk-request`. Expose `ETag`, `Content-Range`, and `Accept-Ranges`. CORS lets the browser send these requests. IAM controls what they can access. [S3 CORS configuration](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ManageCorsUsing.html)
+Set bucket CORS to the exact app origin. Allow `GET`, `HEAD`, and `PUT`, with request headers `Authorization`, `Content-Type`, `Range`, `If-Match`, `If-None-Match`, `x-amz-*`, `amz-sdk-invocation-id`, and `amz-sdk-request`. Expose `ETag`, `Content-Range`, and `Accept-Ranges`. [S3 CORS configuration](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ManageCorsUsing.html)
 
-Choose **Amazon S3** in Minnelux and enter the bucket name, region, library prefix (defaults to `library`), AWS-provided Cognito origin (for example, `https://your-domain.auth.us-east-2.amazoncognito.com`), user pool ID, public app client ID, and identity pool ID. Allow that origin, the regional Cognito Identity endpoint, and the regional S3 endpoint in the app and worker Content Security Policy. Sign in as a Cognito library user. Keep AWS console and administrative credentials outside the app.
+In the app page’s `connect-src` policy, allow the managed-login origin and `https://cognito-identity.<region>.amazonaws.com`. In the worker’s policy, allow the regional S3 origin the SDK uses for your bucket, typically `https://<bucket>.s3.<region>.amazonaws.com`.
+
+## Open the library
+
+Under **Storage provider**, choose **Amazon S3** and enter the bucket name, AWS region, library prefix (default `library`), Cognito managed-login origin, public app client ID, user pool ID, and identity pool ID. Enter an editor group if you use a group other than `writers`. Connect and sign in as a Cognito library user.
+
+As an editor, publish a synthetic JPEG and reopen the library. As a viewer, confirm that the photo opens and the app offers no import action.
 
 ## If the library fails to open
 
 | Symptom | Check |
 | --- | --- |
-| Cognito sign-in fails | Check the managed-login URL, app client, allowed callback URL, and user status. |
-| Sign-in works but the library is denied | Check the identity pool role mapping, the bucket region, and IAM permissions on the selected prefix. |
-| Browsing works but changes fail | Check that the user belongs to the configured editor group, is mapped to the correct IAM role, and that the role can write the head and snapshots. |
-| The browser reports a network or cross-origin error | Check the regional S3 endpoint, exact app origin, allowed and exposed headers, and site Content Security Policy. |
+| Cognito sign-in fails | Check the managed-login origin, app client, callback URL, and user status. |
+| Sign-in works but the library is denied | Check the identity pool role mapping, bucket region, and role permissions for the prefix. |
+| Browsing works but changes fail | Check the Cognito editor group and the IAM role's conditional write permissions. |
+| The browser reports a network or cross-origin error | Check the regional endpoints, app origin, CORS headers, and Content Security Policy. |
 
-Disconnecting clears the local app session. To remove someone's access, remove their role assignment and revoke their Cognito sessions. To deny already-issued AWS sessions before expiry, apply IAM revocation for the affected role. Role-wide revocation affects other sessions using that role. [Revoking IAM role sessions](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_revoke-sessions.html)
+**Disconnect** clears the local app session. To remove someone's access, remove their role assignment and revoke their Cognito sessions. IAM can revoke already-issued AWS sessions for a role. That revocation affects other sessions using the role. [Revoke IAM role sessions](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_revoke-sessions.html)
