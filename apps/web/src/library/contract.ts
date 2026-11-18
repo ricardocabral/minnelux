@@ -111,6 +111,7 @@ export type PublishOptions = { mode?: 'publish' | 'recover'; signal?: AbortSigna
 export interface LibraryRepository {
   open(signal?: AbortSignal): Promise<PinnedLibrary>
   loadIndex(pin: PinnedLibrary, kind: 'text' | 'tags', signal?: AbortSignal): Promise<IndexLoad>
+  readOriginal(pin: PinnedLibrary, assetId: string, signal?: AbortSignal): Promise<Blob>
   readPreview(pin: PinnedLibrary, assetId: string, signal?: AbortSignal): Promise<Blob | undefined>
   publish(intent: LibraryIntent, options?: PublishOptions): Promise<PublishResult>
 }

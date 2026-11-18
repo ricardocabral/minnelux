@@ -5,6 +5,9 @@ import logo from '../../../../docs/mkt/logo/horizontal/minnelux-light-320x88.png
 
 const symbols = {
   search: <><circle cx="10.7" cy="10.7" r="5.5" /><path d="m15 15 4 4" /></>,
+  'zoom-in': <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M7.5 10.5h6m-3-3v6" /></>,
+  'zoom-out': <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M7.5 10.5h6" /></>,
+  download: <path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4" />,
   library: <><rect x="4" y="6" width="16" height="14" rx="2" /><path d="M8 3h8m-12 14 4.4-4.3 3.3 3.1 2.6-2.6L20 18" /><circle cx="15.2" cy="10.3" r="1" /></>,
   tag: <><path d="M20 12 12 20 4 12V4h8z" /><circle cx="8.1" cy="8.1" r="1" /></>,
   collections: <path d="M3 8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,

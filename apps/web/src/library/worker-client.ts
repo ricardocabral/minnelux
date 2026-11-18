@@ -102,6 +102,7 @@ export function connectLibraryClient(
     query: (query, signal) => send('query', query, signal),
     readRange: (handle, offset, limit, signal) => send('readRange', { handle, offset, limit }, signal),
     readAsset: (handle, assetId, signal) => send('readAsset', { handle, assetId }, signal),
+    readOriginal: (handle, assetId, signal) => send('readOriginal', { handle, assetId }, signal),
     readPreview: (assetId, signal) => send('readPreview', { assetId }, signal),
     readAlbumCover: (tagId, signal) => send('readAlbumCover', { tagId }, signal),
     release: (handle) => send('release', { handle }),

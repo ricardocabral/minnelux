@@ -23,8 +23,9 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
   const zoom = zoomedAt === position
   const touch = useRef<{ x: number; y: number } | undefined>(undefined)
   const row = rows[position]
-  const [detail, setDetail] = useState<{ position: number; asset?: AssetV1; error?: string }>()
-  const asset = detail?.position === position ? detail.asset : undefined
+  const [loadedDetail, setDetail] = useState<{ handle: string; position: number; asset?: AssetV1; error?: string }>()
+  const detail = loadedDetail?.handle === result.handle && loadedDetail.position === position ? loadedDetail : undefined
+  const asset = detail?.asset
   const rowId = row?.id
 
   useEffect(() => {
@@ -34,9 +35,9 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
         const id = rowId ?? (await client.readRange(result.handle, position, 1, controller.signal))[0]?.id
         if (!id) throw new Error('missing')
         const asset = await client.readAsset(result.handle, id, controller.signal)
-        if (!controller.signal.aborted) setDetail({ position, asset })
+        if (!controller.signal.aborted) setDetail({ handle: result.handle, position, asset })
       } catch (error) {
-        if (!controller.signal.aborted) setDetail({ position, error: libraryError(error, 'Media details are unavailable.') })
+        if (!controller.signal.aborted) setDetail({ handle: result.handle, position, error: libraryError(error, 'Media details are unavailable.') })
       }
     }
     void read()
@@ -59,7 +60,7 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
   const media = asset ?? row
   const mediaId = media?.id
   const hasPreview = asset ? asset.previews.length > 0 : row?.hasPreview
-  const previewError = detail?.position === position ? detail.error : undefined
+  const previewError = detail?.error
   const allowZoom = media?.mediaKind === 'photo' && hasPreview
 
   return <Modal className="viewer" titleId="viewer-title" onDismiss={onClose}>
@@ -106,9 +107,9 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
         <h2 id="viewer-title">{title}</h2>
         {date ? <p>{date}</p> : null}
       </div>
-      {allowZoom ? <div className="viewer-tools">
-        <button type="button" className="control" aria-pressed={zoom} onClick={toggleZoom}>{zoom ? 'Fit image' : 'Zoom in'}</button>
-      </div> : null}
+      <ViewerTools key={`${result.handle}:${position}`} client={client} handle={result.handle}
+        photo={asset?.mediaKind === 'photo' ? asset : undefined}
+        zoom={zoom} onZoom={allowZoom ? toggleZoom : undefined} />
     </footer>
   </Modal>
 
@@ -123,6 +124,56 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
       step(event.key === 'ArrowLeft' ? -1 : 1)
     }
   }
+}
+
+function ViewerTools({ client, handle, photo, zoom, onZoom }: {
+  client: LibraryClient
+  handle: string
+  photo?: AssetV1
+  zoom: boolean
+  onZoom?: () => void
+}) {
+  const active = useRef<AbortController | undefined>(undefined)
+  const [download, setDownload] = useState<{ status: 'pending' } | { status: 'failed'; message: string }>()
+  const downloading = download?.status === 'pending'
+  useEffect(() => () => active.current?.abort(), [])
+
+  async function downloadOriginal() {
+    if (!photo || active.current) return
+    const controller = new AbortController()
+    active.current = controller
+    setDownload({ status: 'pending' })
+    try {
+      const blob = await client.readOriginal(handle, photo.id, controller.signal)
+      if (controller.signal.aborted) return
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = photo.filename
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      link.click()
+      setDownload(undefined)
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setDownload({ status: 'failed', message: libraryError(error, 'Could not download the original. Try again.') })
+      }
+    } finally {
+      active.current = undefined
+    }
+  }
+
+  if (!photo && !onZoom) return null
+  const zoomLabel = zoom ? 'Fit image' : 'Zoom in'
+  return <div className="viewer-tools">
+    <div className="viewer-tool-buttons">
+      {onZoom ? <button type="button" className="control icon-button" aria-label={zoomLabel} title={zoomLabel}
+        aria-pressed={zoom} onClick={onZoom}><Icon name={zoom ? 'zoom-out' : 'zoom-in'} /></button> : null}
+      {photo ? <button type="button" className="control icon-button" aria-label="Download original"
+        title="Download original" aria-disabled={downloading || undefined} onClick={downloadOriginal}><Icon name="download" /></button> : null}
+    </div>
+    {downloading ? <p role="status">Preparing download…</p> : null}
+    {download?.status === 'failed' ? <p role="alert">{download.message}</p> : null}
+  </div>
 }
 
 function ViewerImage({ client, id, title, pending, onZoom }: {

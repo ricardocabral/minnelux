@@ -100,12 +100,16 @@ function serve(sessionId: string, repository: LibraryRepository, canWrite: boole
           }
         })
       }
-      case 'readAsset': {
+      case 'readAsset':
+      case 'readOriginal': {
         const { assetId, handle } = request.input
         if (!results.get(handle)?.includes(assetId)) throw failure('result-expired')
         const asset = assets.get(assetId)
         if (!asset) throw failure('asset-missing')
-        return asset
+        if (request.operation === 'readAsset') return asset
+        const blob = await repository.readOriginal(pin, assetId, signal)
+        requireCurrent()
+        return blob
       }
       case 'readPreview': {
         const blob = await repository.readPreview(pin, request.input.assetId, signal)
