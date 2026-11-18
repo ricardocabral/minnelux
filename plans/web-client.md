@@ -1,8 +1,8 @@
 # Minnelux web client implementation plan
 
-Deliver a static browser client that opens, edits, searches, and plays a private archive. Prove the browser and provider requirements first, build one complete GCS workflow, then use it as the reference for provider parity and release.
+Deliver a static browser client that opens, edits, searches, and plays a private archive. Start with shared contracts and a thin GCS reference workflow alongside the provider proofs. Use that workflow as the reference for feature integration, provider parity, and release.
 
-[Product requirements](../docs/prod/minnelux-prd.md) · [Web client architecture](../docs/dev/web-client/SPEC.md)
+[Product requirements](../docs/prod/minnelux-prd.md) · [Web client architecture](../docs/dev/web-client/SPEC.md) · [GCS reference workflow plan](gcs-reference-workflow.md)
 
 ## Decisions every slice uses
 
@@ -17,9 +17,11 @@ Base implementation worktrees on the current agreed main revision. The source ma
 
 **Owner** · Integration lead. **Prerequisites** · An agreed base and a synthetic private photo, seekable video, and small library fixture.
 
+This phase and [GCS Task 1](gcs-reference-workflow.md#task-1--contracts-and-fixtures) are the same shared commit. While the lead prepares it, the storage lane can reproduce the existing hosted GCS proof and generate the Flickr v1 fixture. The frontend lane can prepare the scaffold, synthetic proof page, and browser fixtures with the lead.
+
 - [ ] Establish the strict TypeScript and Vite app in `apps/web/`. Serve a minimal proof page from the built static assets, with a library worker entry and a stable service-worker URL under the deployment base. Demonstrate opening a synthetic revision through the worker and rendering one thumbnail.
-- [ ] Check in the small typed interfaces and fixture builders for provider adapters, revision-bound reads, library jobs, and video registration. Include a versioned worker envelope and a common authorized range-read interface with a fixture implementation. Use the [existing Flickr repository contract](https://github.com/ricardocabral/minnelux/blob/b3d0b33/docs/dev/flickr-import/REPOSITORY-CONTRACT.md) at the importer interface.
-- [ ] Freeze the repository encodings with synthetic output from the v1 Flickr importer and an exact v2 fixture. Prove the reader opens v1 and the publisher conditionally advances it to v2 without losing IDs, originals, owner state, or retained receipts. Check that reads leave the v1 objects unchanged. Pass the canonical fixture to every writer.
+- [ ] Check in the shared storage, repository, search, and video contracts. Use the [library worker interface and fixtures in GCS Task 1](gcs-reference-workflow.md#task-1--contracts-and-fixtures) for the frontend handoff. The proof page opens and queries a synthetic revision through that interface.
+- [ ] Check in the generated Flickr v1 input and the expected v2 manifest. Publish both as contract fixtures for the implementation tracks. Verify the actual conditional v1-to-v2 publication during [GCS Task 3](gcs-reference-workflow.md#task-3--revision-repository-and-publication).
 - [ ] Provide a shared fixture object endpoint that supports pagination, conditional writes, byte ranges, stale-writer rejection, and dropping a successful head write's response. Verify the proof through the browser against this endpoint. Keep the endpoint in test infrastructure.
 - [ ] Provide package commands for build, strict type checking and lint, focused Node tests, and Playwright. Document how to replay a seeded case and capture a local failure trace. Give provider, gallery, and importer owners the shared contract commit and fixture entry points.
 
@@ -27,7 +29,7 @@ Base implementation worktrees on the current agreed main revision. The source ma
 
 ## Phase 1 · Prove private access and video on the deployed static build
 
-**PRD coverage** · R1, the storage and video prerequisites for R2 and R7. **Prerequisite** · Phase 0 contract commit.
+**PRD coverage** · R1, the storage and video prerequisites for R2 and R7. Existing hosted probes can run during Phase 0. Use the Phase 0 contract commit for implementation in the shared app. This work overlaps Phase 2.
 
 | Parallel assignment | Scope and deliverable |
 | --- | --- |
@@ -47,27 +49,27 @@ Base implementation worktrees on the current agreed main revision. The source ma
 
 ## Phase 2 · Land one end-to-end GCS reference slice
 
-**PRD coverage** · R1, R2, R5, R6, R8, narrow first path. **Prerequisite** · Phase 1 feasibility gate.
+**PRD coverage** · R1, R2, R4, R5, R6, R8, narrow first path. **Prerequisite** · Phase 0 contract commit. Build the repository, search, and minimal proof page while Phase 1 continues. Use the proven GCS adapter for the hosted walkthrough. The Phase 1 feasibility gate still applies to full UI implementation.
 
-**Owner** · GCS reference builder, who owns the shared library worker, repository, publication, and search index code for this phase and later integrations. The integration lead owns shell and feature wiring. Use the proven adapter and actual worker. Go from authorized connection and one local photo to preview, conditional publication, result display, and fresh-browser search. Use the resulting repository and UI contracts as the base for follow-up work.
+**Owners** · The [GCS storage, repository, and search task owners](gcs-reference-workflow.md#phase-1--publish-reopen-and-search-one-photo) build their modules in parallel. The integration lead owns shell and feature wiring. Use the actual worker to go from authorized connection and one local photo to preview, tagging, conditional publication, result display, and fresh-browser search.
 
 - [ ] Open a seeded revision and distinguish confirmed empty, unavailable, unauthorized, and corrupt library states. Import one photo unchanged and create a thumbnail.
-- [ ] Publish the original, preview, and same-revision catalog and index objects. Confirm the head only advances once. Reopen in a fresh authorized browser and find the photo from persisted search, with no listing of the media prefix on the reopen path.
+- [ ] Publish the original, preview, and same-revision catalog and index objects with two tags on the photo. Verify both collections reference that asset. Confirm the head only advances once. Reopen in a fresh authorized browser and find the photo from persisted search without listing the media prefix on the reopen path.
 - [ ] Inject a lost successful head response. Confirm the receipt resolves the outcome without a duplicate asset or publication. Exercise two authorized sessions and verify stale publication cannot overwrite the winning head.
 - [ ] Demonstrate the built app on the test GCS bucket. Land a fixture-backed Playwright walkthrough so other owners can use the same result and publication contracts independently.
 
-**Exit evidence** · A pinned reference commit with one real GCS success path and repeatable fixture-backed acceptance. Parallel feature branches may start from the Phase 0 contract and Phase 1 gate while this slice lands. Feature integration uses this reference commit.
+**Exit evidence** · A pinned reference commit with one real GCS success path and repeatable fixture-backed acceptance, including the repository's v1-to-v2 test. Fixture-backed frontend work can proceed from the Phase 0 contract commit. Feature integration uses the GCS reference commit.
 
 ## Phase 3 · Complete the GCS workflow and integrate parallel slices
 
-**PRD coverage** · R2 through R8 on the reference provider. **Start condition** · Phase 1 is complete and the listed contracts exist. **Integration base** · Phase 2 reference commit.
+**PRD coverage** · R2 through R8 on the reference provider. **Start conditions** · Phase 0 for fixture-backed frontend work. Phase 1 feasibility evidence for full UI implementation. **Integration base** · Phase 2 reference commit.
 
 | Assignment | Consumes and owns | End-to-end acceptance |
 | --- | --- | --- |
 | **Gallery and search** | Consumes revision-bound result and range fixtures. Owns collection and search UI, virtualized rows, and bounded preview scheduling. | Open All Media, Untagged, and a tag collection. Search exact PRD fields and combine tag, kind, and date filters. Verify stable rank or capture-date order, viewport-only previews, and latest-query wins after fast typing or a library switch. |
 | **Photo and video viewer** | Consumes result handles and the Phase 1 video route. Owns the viewer, navigation, object URL lifetime, and focus handoff. | Open a result, navigate the pinned list with keyboard, touch, and controls, zoom images, seek video, and restore focus, query, and scroll. Verify decode failure has a download path. Replay tests check session change and worker restart. |
 | **Local and existing-object import** | Consumes the import job and publication contracts. Owns local multi-file and existing-object import, progress and error UI for those flows, and byte-preserving retry. | Import mixed photo and video, then catalog objects under an approved existing prefix. Verify originals retain their bytes or existing locations. Per-file errors and retries retain stable IDs, and the published library reopens and searches. |
-| **Tag edits and index repair** | Consumes repository publication and display records. Owns edit and repair UI and domain commands, including Flickr provenance overrides. The GCS reference builder owns changes to shared worker and repository code. | Create, rename, apply, and remove tags on single and multiple assets. Verify two collections reference one asset. Simulate independent and overlapping edits. Remove or corrupt an index, browse the catalog, repair it, and search in a fresh session. |
+| **Tag edits and index repair** | Consumes repository publication and display records. Owns edit and repair UI and domain commands, including Flickr provenance overrides. Coordinate repository and search changes with the respective GCS task owners and worker message changes with the integration lead. | Create, rename, apply, and remove tags on single and multiple assets. Verify two collections reference one asset. Simulate independent and overlapping edits. Remove or corrupt an index, browse the catalog, repair it, and search in a fresh session. |
 | **Flickr import** | Consumes the existing Flickr contract, shared library revision and import fixtures. Owns the multipart ZIP workflow, match review, and parser and planner integration. | Handle metadata-first and media-first with a publish and fresh-browser reopen between parts. Show ambiguous and duplicate candidates before writing. Verify raw JSON and original bytes, provenance and orientation, replay after owner edits, late collisions, and authoritative album reconciliation. Exercise replay with the integrated owner edit slice before closing this assignment. |
 | **S3, Azure, and R2 integration** | Run one independent assignment per provider. Consume the common adapter and provider-specific Phase 1 proof. Own each provider's module, configuration, setup docs, and adapter tests. | Select the provider from the same static build. Use its adapter with the existing library and media contracts. Open, publish and reopen the same fixture workflow. Confirm consistent errors and require no provider-specific branches in gallery, search, or import flows. |
 
@@ -85,6 +87,6 @@ Base implementation worktrees on the current agreed main revision. The source ma
 ## How to dispatch and integrate the work
 
 1. **Integration lead owns shared contracts and wiring.** Keep one worktree per writing agent from the agreed base. The lead owns app entry points, shared schemas and fixtures, dependency manifests, and integration wiring. Each task owner owns feature or provider modules and their focused tests. Changes to a shared contract go through its owner and include an updated fixture and the downstream impact.
-2. **Schedule from prerequisites.** Start Phase 1 with GCS, the video relay, and S3 if three builder slots are available. Rotate free slots to Azure, R2, and fixture evidence. After the proof gate, keep the GCS reference owner active while gallery, viewer, and importer owners take ready work using contract fixtures. Move provider integration, edit and repair, and remaining import work into free slots as their contracts are ready. A fixture branch can demonstrate its behavior independently before the deployed integration.
+2. **Schedule from prerequisites.** Begin hosted GCS proof reproduction and fixture preparation while the integration lead prepares Phase 0. Branch from the contract commit for provider proofs, the GCS reference slice, and fixture-backed frontend work. Rotate provider slots through S3, Azure, and R2 as capacity allows. After the feasibility gate, take the remaining UI work and integrate each slice on the GCS reference.
 3. **Give each agent a bounded handoff.** Include the task row, base commit, owned paths, contract links, fixture, acceptance scenarios, and expected artifact. Ask for a diff and the exact checks run, with failing scenarios and dependencies called out. Share a provider capability only after a recorded probe confirms it.
 4. **Integrate by tested contracts.** The lead reviews changes for scope and compatibility, runs focused tests and the cross-feature walkthrough, and relies on branch CI for the full suite. When two branches need the same interface change, land the shared contract through its owner before both integrate. Before merging a production change, record the required `Plano pós-merge` evidence and obtain merge authorization.
