@@ -16,7 +16,6 @@ const MAX_SIDECAR_BYTES = MiB;
 const SIGNATURE_BYTES = 128;
 
 const photoFilename = /^photo_(\d+)\.json$/i;
-const digitString = /^\d+$/;
 const mediaFilename = /(?:_\d+_o(?:\.[^.]+)?|\.(?:jpe?g|png|gif|webp|tiff?|bmp|avif|heic|heif|mp4|m4v|mov|avi|mpeg|mpg|webm|mkv|3gp|wmv))$/i;
 const zipStructureWarnings = new Set([
   "appended data",
@@ -152,12 +151,7 @@ function parseMetadata(member, bytes) {
     const expected = photoFilename.exec(member.filename)?.[1];
     if (expected === undefined || json.id !== expected) throw zipError("photo-id-mismatch");
   } else if (member.kind === "album-json") {
-    if (!Array.isArray(json.albums) || json.albums.some(album =>
-      typeof album?.id !== "string" || !digitString.test(album.id) ||
-      typeof album.title !== "string" || !Array.isArray(album.photos) ||
-      album.photos.some(id => typeof id !== "string" || !digitString.test(id)))) {
-      throw zipError("invalid-metadata");
-    }
+    if (!Array.isArray(json.albums)) throw zipError("invalid-metadata");
   } else {
     // The importer only uses the profile as account-identity evidence.
     return typeof json.nsid === "string" ? { nsid: json.nsid } : {};

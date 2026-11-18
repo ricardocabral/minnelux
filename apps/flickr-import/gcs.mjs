@@ -1,3 +1,4 @@
+const maxObjectBytes = 1024 ** 3
 const storageOrigin = 'https://storage.googleapis.com'
 const generationPattern = /^\d+$/
 const bucketPattern = /^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/
@@ -29,22 +30,32 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
   return {
     libraryId: `gs://${bucket}`,
 
-    async get(key, { signal } = {}) {
+    async get(key, { signal, maxBytes = maxObjectBytes } = {}) {
       const url = new URL(`/storage/v1/b/${encodedBucket}/o/${encodeURIComponent(key)}`, storageOrigin)
       url.searchParams.set('fields', 'generation,size')
       const metadata = await send(url, {}, signal)
       if (metadata.status === 404) return null
       const { generation, size } = await checkedJson(metadata)
       requireGeneration(generation)
-      if (!/^\d+$/.test(size) || Number(size) > 1024 ** 3) {
-        throw new Error('Cloud Storage object exceeds the read limit')
+      const expectedSize = Number(size)
+      if (typeof size !== 'string' || !/^\d+$/.test(size) || expectedSize > Math.min(maxBytes, maxObjectBytes)) {
+        throw corruptSize('Cloud Storage object exceeds the read limit')
       }
 
       url.search = new URLSearchParams({ alt: 'media', generation })
       const media = await send(url, {}, signal)
       checkStatus(media)
-      const body = await media.blob()
-      if (body.size !== Number(size)) throw new Error('Cloud Storage object size did not match metadata')
+      let received = 0
+      const measured = media.body?.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+          received += chunk.byteLength
+          if (received > expectedSize) throw corruptSize('Cloud Storage object size did not match metadata')
+          controller.enqueue(chunk)
+        },
+      }), { signal })
+      const headers = { 'Content-Type': media.headers.get('Content-Type') ?? '' }
+      const body = await new Response(measured, { headers }).blob()
+      if (received !== expectedSize) throw corruptSize('Cloud Storage object size did not match metadata')
       return { body, generation }
     },
 
@@ -80,6 +91,10 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
       return { generation }
     },
   }
+}
+
+function corruptSize(message) {
+  return Object.assign(new Error(message), { code: 'corrupt' })
 }
 
 function requireGeneration(generation) {

@@ -65,3 +65,36 @@ test('limits the editor token to library objects and replacement of the exact he
   })
   assert.equal(token, 'scoped-fixture')
 })
+
+test('rejects an oversized object before requesting its media generation', async () => {
+  const requests = []
+  const store = createGcsStore('minnelux-test', () => 'fixture-token', {
+    fetch: async url => {
+      requests.push(url.searchParams.get('alt') ?? 'metadata')
+      if (!url.searchParams.has('alt')) return Response.json({ generation: '3', size: '65537' })
+      return new Response(new Uint8Array(65537))
+    },
+  })
+  await assert.rejects(store.get('library/head.json', { maxBytes: 65536 }), { code: 'corrupt' })
+  assert.deepEqual(requests, ['metadata'])
+})
+
+test('cancels the media stream when it exceeds the observed size', async () => {
+  let reads = 0
+  let cancelled = false
+  const stream = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(new Uint8Array(3))
+      if (++reads === 20) controller.close()
+    },
+    cancel() { cancelled = true },
+  })
+  const store = createGcsStore('minnelux-test', () => 'fixture-token', {
+    fetch: async url => url.searchParams.has('alt')
+      ? new Response(stream)
+      : Response.json({ generation: '3', size: '4' }),
+  })
+  await assert.rejects(store.get('library/head.json', { maxBytes: 8 }), { code: 'corrupt' })
+  assert.equal(cancelled, true)
+  assert.ok(reads < 20)
+})

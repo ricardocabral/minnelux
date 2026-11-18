@@ -5,6 +5,8 @@ import { sourceUrl } from './catalog-metadata.mjs';
 // All keys passed to the adapter include the configured prefix. Every reference on disk is relative.
 const HASH = /^[a-f0-9]{64}$/;
 const ID = /^\d+$/;
+const MAX_HEAD = 64 * 1024;
+const MAX_MANIFEST = 4 * 1024 * 1024;
 const MAX_SNAPSHOT = 128 * 1024 * 1024;
 const MAX_RECEIPTS = 64;
 const encoder = new TextEncoder();
@@ -378,15 +380,24 @@ function protectSource(source, old) {
 export function createFlickrRepository(store, {prefix = 'library', uploadConcurrency = 16} = {}) {
   check(pathSegments(prefix), 'invalidReference');
   const pinned = new Map();
-  const get = (key, signal) => store.get(prefix + '/' + key, {signal});
+  const get = (key, signal, maxBytes) => store.get(prefix + '/' + key, {signal,maxBytes});
   const put = (key, blob, match, signal) => store.put(prefix + '/' + key, blob, {match, signal});
+
+  async function getReferencedObject(key, signal, byteLength) {
+    try {
+      return await get(key,signal,byteLength);
+    } catch (error) {
+      if (error?.code === 'corrupt') fail('integrity');
+      throw error;
+    }
+  }
 
   async function immutable(key, blob, sha, signal) {
     try {
       return await put(key,blob,'0',signal);
     } catch (error) {
       if (![403,412].includes(error.status)) throw error;
-      const existing = await get(key, signal);
+      const existing = await getReferencedObject(key,signal,blob.size);
       if (!existing && error.status === 403) throw error;
       check(existing && existing.body.size === blob.size && await digest(existing.body) === sha,'integrity');
       return {generation:existing.generation};
@@ -399,12 +410,12 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
     await immutable(key, body.slice(0,body.size,'application/gzip'),sha256,signal);
     return {key,sha256,byteLength:body.size};
   }
-  function verifyDescriptor(ref, expectedKey) {
+  function verifyDescriptor(ref, expectedKey, maxBytes = MAX_SNAPSHOT) {
     check(dict(ref) && validHash(ref.sha256) && safeSize(ref.byteLength) &&
-      ref.byteLength <= MAX_SNAPSHOT && ref.key === expectedKey, 'corrupt');
+      ref.byteLength <= maxBytes && ref.key === expectedKey, 'corrupt');
   }
   async function loadJson(ref, gzip, signal) {
-    const data = await get(ref.key,signal);
+    const data = await get(ref.key,signal,ref.byteLength);
     check(data && data.body.size === ref.byteLength && await digest(data.body) === ref.sha256,'corrupt');
     const value = await readJson(data.body,gzip,signal);
     version(value);
@@ -412,12 +423,13 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
   }
   async function observe(signal) {
     signal?.throwIfAborted();
-    const current = await get('head.json',signal);
+    const current = await get('head.json',signal,MAX_HEAD);
     if (!current) return {generation:'0', manifest:null};
+    check(current.body.size <= MAX_HEAD,'corrupt');
     const head = await readJson(current.body,false,signal);
     version(head);
     check(/^[0-9a-f-]{36}$/.test(head.revisionId),'corrupt');
-    verifyDescriptor(head.manifest,'revisions/' + head.revisionId + '.json');
+    verifyDescriptor(head.manifest,'revisions/' + head.revisionId + '.json',MAX_MANIFEST);
     const manifest = await loadJson(head.manifest,false,signal);
     check(manifest.revisionId === head.revisionId && Array.isArray(manifest.sources) &&
       Array.isArray(manifest.receipts) && manifest.receipts.length <= MAX_RECEIPTS,'corrupt');
@@ -477,7 +489,7 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
     try {
       const pin = pinned.get(baseToken);
       check(pin && validRef(ref,ref?.kind,pin.key) && pin.refs.has(canonical(ref)),'invalidReference');
-      const stored = await get(ref.key,signal);
+      const stored = await getReferencedObject(ref.key,signal,ref.byteLength);
       check(stored && (!ref.observedVersion || ref.observedVersion === stored.generation) &&
         stored.body.size === ref.byteLength && await digest(stored.body) === ref.sha256,'integrity');
       return stored.body.stream();
@@ -611,6 +623,7 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
       const receipts = [...(m?.receipts ?? []),{sourceKey:plan.sourceKey,operationId:plan.operationId,fingerprint,committedRevisionId:revisionId}].slice(-MAX_RECEIPTS);
       const manifest = {version:1,revisionId,parentRevisionId:m?.revisionId ?? null,catalog:catalogRef,textIndex,tagIndex,indexVersion:1,tokenizerVersion:1,sources,receipts};
       const body = new Blob([canonical(manifest)],{type:'application/json'});
+      check(body.size <= MAX_MANIFEST);
       const manifestRef = {key:'revisions/' + revisionId + '.json',sha256:await digest(body),byteLength:body.size};
       await immutable(manifestRef.key,body,manifestRef.sha256,signal);
       signal?.throwIfAborted();

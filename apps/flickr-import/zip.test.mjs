@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { crc32, deflateRawSync } from "node:zlib";
 import { ids, metadataFirst } from "../../spikes/flickr/fixture.mjs";
+import { prepareFlickrImport } from "./plan.mjs";
 import { scanFlickrZip } from "./zip.mjs";
 
 const jpeg = await readFile(new URL("../../spikes/flickr/fixtures/photo.jpg", import.meta.url));
@@ -115,6 +116,24 @@ test("reports unsafe paths, malformed JSON and unsupported media while retaining
     "photo-id-mismatch", "unsupported-media", "album-json",
   ]);
   assert.deepEqual(members[7].json.albums[0].photos, ["0", "9"]);
+});
+
+test("imports valid albums from a mixed document and keeps the original JSON bytes", async () => {
+  const payload = JSON.stringify({ albums: [
+    { id: "1", title: "Walks", photos: [ids.photo] },
+    { id: "2", title: "Invalid member ID", photos: [42] },
+    null,
+  ] }, null, 2);
+  const part = await scanFlickrZip(archive([{ path: "albums.json", payload }]));
+  const base = { version: 1, sourceKey: "fixture", baseToken: "empty", source: null, assets: [], tags: [] };
+  const { plan, preview } = await prepareFlickrImport(base, [part], {
+    binding: { sourceKey: base.sourceKey, label: "Fixture" },
+  });
+  assert.deepEqual(plan.tags.map(tag => tag.title), ["Walks"]);
+  assert.deepEqual(preview.albumReferenceOnly, [ids.photo]);
+  assert.deepEqual(preview.invalidMetadata.map(issue => issue.reason), ["invalid-or-repeated-album"]);
+  assert.equal(plan.uploads.length, 1);
+  assert.equal((await read(await plan.uploads[0].openBytes())).toString(), payload);
 });
 
 test("rejects archive structure corruption and isolates a member that fails CRC validation", async () => {
