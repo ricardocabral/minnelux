@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private synthetic storage and Cognito identities for the Minnelux S3 proof
+Parameters:
+  AppOrigin:
+    Type: String
+    AllowedPattern: 'https://[a-zA-Z0-9.-]+(:[0-9]+)?|http://localhost:[0-9]+'
+    Description: Exact static site origin, with no trailing slash
+  CognitoDomain:
+    Type: String
+    AllowedPattern: '[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'
+    Description: Available regional Cognito managed-login prefix
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: [!Ref AppOrigin]
+            AllowedMethods: [GET, HEAD, PUT]
+            AllowedHeaders:
+              - Authorization
+              - Content-Type
+              - Range
+              - If-Match
+              - If-None-Match
+              - 'x-amz-*'
+              - amz-sdk-invocation-id
+              - amz-sdk-request
+            ExposedHeaders: [ETag, Content-Range, Accept-Ranges]
+            MaxAge: 300
+      LifecycleConfiguration:
+        Rules:
+          - Id: RemoveSyntheticPublicationRuns
+            Status: Enabled
+            Prefix: proof/runs/
+            ExpirationInDays: 1
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolTier: ESSENTIALS
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+  WebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: [!Sub '${AppOrigin}/callback.html']
+      PreventUserExistenceErrors: ENABLED
+  LoginDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomain
+      ManagedLoginVersion: 2
+      UserPoolId: !Ref UserPool
+  Branding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref WebClient
+      UseCognitoProvidedValues: true
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      AllowUnauthenticatedIdentities: false
+      AllowClassicFlow: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref WebClient
+          ProviderName: !GetAtt UserPool.ProviderName
+          ServerSideTokenCheck: true
+  UnassignedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+  ReaderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+        - PolicyName: ReadProofObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: ['proof/fixtures/*', 'proof/runs/*']
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub '${Bucket.Arn}/proof/fixtures/*'
+                  - !Sub '${Bucket.Arn}/proof/runs/*'
+  WriterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+        - PolicyName: ReadProofObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: ['proof/fixtures/*', 'proof/runs/*']
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub '${Bucket.Arn}/proof/fixtures/*'
+                  - !Sub '${Bucket.Arn}/proof/runs/*'
+        - PolicyName: PublishProofObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource:
+                  - !Sub '${Bucket.Arn}/proof/runs/*/revisions/*'
+                  - !Sub '${Bucket.Arn}/proof/runs/*/head.json'
+                Condition:
+                  StringEquals:
+                    s3:if-none-match: '*'
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub '${Bucket.Arn}/proof/runs/*/head.json'
+                Condition:
+                  'Null':
+                    s3:if-match: 'false'
+  Readers:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: readers
+      UserPoolId: !Ref UserPool
+      RoleArn: !GetAtt ReaderRole.Arn
+      Precedence: 10
+  Writers:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: writers
+      UserPoolId: !Ref UserPool
+      RoleArn: !GetAtt WriterRole.Arn
+      Precedence: 5
+  RoleMapping:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt UnassignedRole.Arn
+      RoleMappings:
+        PoolClient:
+          Type: Token
+          AmbiguousRoleResolution: AuthenticatedRole
+          IdentityProvider: !Sub '${UserPool.ProviderName}:${WebClient}'
+Outputs:
+  BrowserConfig:
+    Value: !Sub |
+      {
+        "region": "${AWS::Region}",
+        "bucket": "${Bucket}",
+        "userPoolId": "${UserPool}",
+        "identityPoolId": "${IdentityPool}",
+        "clientId": "${WebClient}",
+        "cognitoOrigin": "https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com"
+      }

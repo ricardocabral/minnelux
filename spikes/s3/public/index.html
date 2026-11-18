@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>Minnelux S3 browser proof</title>
+    <link rel="stylesheet" href="./style.css">
+    <script type="module" src="./probe.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Minnelux S3 browser proof</h1>
+      <p>Connect to a private S3 bucket with Cognito and test publication and playback.</p>
+      <p id="session" role="status">Loading connection settings</p>
+      <div class="buttons">
+        <button id="sign-in" disabled>Sign in with Cognito</button>
+        <button id="anonymous" disabled>Check signed-out denial</button>
+        <button id="photo" disabled>Read JPEG</button>
+        <button id="inspect" disabled>Check listing and range read</button>
+        <button id="publication" disabled>Check publication</button>
+        <button id="video" disabled>Open video</button>
+        <button id="seek" disabled>Seek to 75%</button>
+        <button id="expiry" disabled>Check URL expiry</button>
+        <button id="disconnect" disabled>Drop local session</button>
+      </div>
+      <img id="preview" alt="Synthetic private JPEG" hidden>
+      <video id="player" controls playsinline crossorigin="anonymous" preload="none" hidden></video>
+      <h2>Evidence</h2>
+      <div id="evidence" role="log"></div>
+    </main>
+  </body>
+</html>

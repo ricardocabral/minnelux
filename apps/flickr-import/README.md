@@ -2,6 +2,8 @@
 
 Import Flickr account-export ZIPs directly from a browser into a private Google Cloud Storage library. The importer previews source matches, preserves original bytes and photo and album JSON, and publishes the catalog, full-text and tag indexes, and resumable import state together. [Flickr specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)
 
+[Open the hosted importer](https://minnelux.web.app/flickr-import/) · [Hosting release instructions](../../spikes/gcs/README.md#redeploy)
+
 ## Build and open
 
 Run from the repository root with Node 22 or later.

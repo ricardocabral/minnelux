@@ -4,7 +4,7 @@
 
 The private test bucket is `minnelux-browser-proof-703092535958` in the `minnelux` Google Cloud project. It contains a synthetic JPEG and a 96-second, fast-start H.264 MP4. The page makes publication test writes under a fresh `proof/runs/<uuid>/` prefix on each run.
 
-The deployed page includes the public OAuth client ID for its HTTPS origin. The Google Auth Platform audience is External in Testing, with `rnc000@gmail.com` as its only listed test user.
+The deployed page includes the public OAuth client ID for its HTTPS origin. The Google Auth Platform audience is External in Testing, with one allowlisted test account.
 
 ## Run the checks
 
@@ -37,7 +37,27 @@ Actual token expiration, a signed-in user without bucket IAM, and desktop and mo
 
 ## Redeploy
 
-Run `firebase deploy --project minnelux --only hosting` from this directory with the Firebase CLI signed in as an authorized project administrator. Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
+The Firebase site serves the probe at `/` and the [Flickr importer](https://minnelux.web.app/flickr-import/) at `/flickr-import/`. Firebase Hosting replaces the site's complete file set on each deploy. Stage both from the intended commit before publishing. Run from the repository root with Node.js 22 or later and the Firebase CLI signed in as a project administrator.
+
+```sh
+stage=$(mktemp -d)
+git archive HEAD apps/flickr-import spikes/gcs | tar -x -C "$stage"
+(
+  cd "$stage/apps/flickr-import" &&
+  npm ci &&
+  npm test &&
+  npm run build
+) &&
+cp -R "$stage/apps/flickr-import/dist" "$stage/spikes/gcs/public/flickr-import" &&
+(
+  cd "$stage/spikes/gcs" &&
+  firebase deploy --project minnelux --only hosting
+)
+```
+
+After publishing, load both paths and verify the browser can load their scripts. Check the importer response for its Content Security Policy, including the Security Token Service endpoint and `frame-ancestors 'none'`. If either path regresses, roll back to the prior version in the Firebase Hosting release history. [Firebase Hosting rollback](https://firebase.google.com/docs/hosting/manage-hosting-resources#roll-back-release)
+
+Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
 
 The fixtures can be generated with FFmpeg.
 

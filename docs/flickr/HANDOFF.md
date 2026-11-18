@@ -4,12 +4,12 @@ Use this handoff alongside the [Minnelux PRD](../prod/minnelux-prd.md#6-release-
 
 ## Local export samples
 
-These are two parts of a real Flickr account export. The paths are local to this machine.
+These are two parts of a real Flickr account export used for local validation.
 
-| Role | Path | Verified contents |
-| --- | --- | --- |
-| Metadata | `~/Downloads/72157728502768245_89ca5e1c07c5_part1.zip` | 9,985 per-item `photo_<id>.json` files and 16 other JSON files, including `albums.json` and account data. |
-| Originals | `~/Downloads/data-download-1.zip` | 500 JPEGs. All 500 match a metadata record by Flickr ID. This part has no video. |
+| Role | Verified contents |
+| --- | --- |
+| Metadata | 9,985 per-item `photo_<id>.json` files and 16 other JSON files, including `albums.json` and account data. |
+| Originals | 500 JPEGs. All 500 match a metadata record by Flickr ID. This part has no video. |
 
 The counts were checked locally on November 18, 2026 by reading ZIP members and JSON with Python. The earlier EXIF check inspected the JPEG APP1/TIFF metadata. Keep the original ZIPs local. Use synthetic or sanitized fixtures in the repo and the hosted spike.
 
