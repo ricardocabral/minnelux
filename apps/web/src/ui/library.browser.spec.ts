@@ -12,7 +12,8 @@ async function openCollection(page: Page, title: string) {
 test('browses the sample collection and opens authorized Flickr details', async ({ page }) => {
   const remoteMedia: string[] = []
   page.on('request', request => {
-    if (new URL(request.url()).hostname.endsWith('flickr.com')) remoteMedia.push(request.url())
+    const { hostname } = new URL(request.url())
+    if (hostname === 'flickr.com' || hostname.endsWith('.flickr.com')) remoteMedia.push(request.url())
   })
 
   await page.goto('/')

@@ -301,6 +301,23 @@
       </div>
     </footer>
   </dialog>
+  <template id="gallery-group">
+    <section class="collection-group"><h2 class="group-title"><span></span></h2><div class="grid"></div></section>
+  </template>
+  <template id="gallery-empty">
+    <div class="empty"><h2></h2><p>Try another search or browse All Media.</p><button type="button" class="control" data-scope="">Browse All Media</button></div>
+  </template>
+  <template id="gallery-tile">
+    <article class="tile">
+      <button type="button" class="tile-open">
+        <img alt="" loading="lazy">
+        <span class="placeholder"><svg class="symbol" aria-hidden="true"><use href="#i-library"/></svg>Preview unavailable</span>
+        <span class="caption" aria-hidden="true"></span>
+        <span class="clip"><svg class="symbol" aria-hidden="true"><use href="#i-play"/></svg></span>
+      </button>
+      <button type="button" class="tile-check" aria-pressed="false"><svg class="symbol" aria-hidden="true"><use href="#i-check"/></svg></button>
+    </article>
+  </template>
   <!-- Sample photos can be found at https://www.pexels.com/photo/{source}/ using the IDs below.
        Sample video source: https://www.pexels.com/video/19912847/
        Pexels media license: https://www.pexels.com/license/ -->
@@ -325,7 +342,18 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const icon = (name) => '<svg class="symbol" aria-hidden="true"><use href="#i-' + name + '"/></svg>';
-    const media = JSON.parse($('embedded-media').textContent);
+    const mediaUrls = new Map();
+    for (const [key, data] of Object.entries(JSON.parse($('embedded-media').textContent))) {
+      const type = key === 'video' ? 'video/mp4' : 'image/jpeg';
+      const prefix = 'data:' + type + ';base64,';
+      if (typeof data !== 'string' || !data.startsWith(prefix)) continue;
+      try {
+        const base64 = btoa(atob(data.slice(prefix.length)));
+        if (base64) mediaUrls.set(key, prefix + encodeURIComponent(base64));
+      } catch {
+        // Invalid base64 leaves the fixture unavailable.
+      }
+    }
     const photos = [
       { id: 1, source: '36071256', title: 'Above the Atlantic', date: '2025-11-23', tags: ['Atlantic coast', 'Flickr archive'], note: 'The cliff path just before sunset, with the lighthouse in the distance.' },
       { id: 2, source: 'video', title: 'Atlantic wake', date: '2025-11-22', tags: ['Atlantic coast', 'Flickr archive'], note: 'A short clip of the blue water and foam behind the boat.', kind: 'video', duration: '0:09' },
@@ -437,25 +465,50 @@
         if (!groups.has(group)) groups.set(group, []);
         groups.get(group).push(asset);
       }
-      $('gallery').innerHTML = displayed.length ? [...groups].map(([group, assets]) =>
-        '<section class="collection-group"><h2 class="group-title">' + group + '<span>' + countLabel(assets.length, 'item') +
-          '</span></h2><div class="grid">' + assets.map(renderTile).join('') + '</div></section>').join('') :
-        '<div class="empty"><h2>' + (terms.length || kind || Object.values(filters).some(Boolean) ? 'No matches' : 'No items here yet') +
-        '</h2><p>Try another search or browse All Media.</p><button type="button" class="control" data-scope="">Browse All Media</button></div>';
+      const gallery = $('gallery');
+      if (groups.size) {
+        gallery.replaceChildren(...[...groups].map(([group, assets]) => {
+          const section = $('gallery-group').content.cloneNode(true);
+          const heading = section.querySelector('h2');
+          heading.prepend(group);
+          heading.querySelector('span').textContent = countLabel(assets.length, 'item');
+          section.querySelector('.grid').append(...assets.map(renderTile));
+          return section;
+        }));
+      } else {
+        const empty = $('gallery-empty').content.cloneNode(true);
+        empty.querySelector('h2').textContent = terms.length || kind || Object.values(filters).some(Boolean)
+          ? 'No matches' : 'No items here yet';
+        gallery.replaceChildren(empty);
+      }
       syncSelection();
     }
 
     function renderTile(asset) {
-      const title = escapeHtml(asset.title);
-      const image = asset.missingPreview ?
-        '<span class="placeholder">' + icon('library') + 'Preview unavailable</span>' :
-        '<img alt="" src="' + media[asset.kind === 'video' ? 'poster' : asset.source] + '" loading="lazy">';
-      const badge = asset.kind === 'video' ? '<span class="clip">' + icon('play') + asset.duration + '</span>' : '';
-      return '<article class="tile"><button type="button" class="tile-open" data-open="' + asset.id +
-        '" aria-label="Open ' + title + (asset.kind === 'video' ? ', video' : '') + '">' + image +
-        '<span class="caption" aria-hidden="true">' + title + '</span>' + badge + '</button>' +
-        '<button type="button" class="tile-check" data-select="' + asset.id + '" aria-label="Select ' + title +
-        '" aria-pressed="false">' + icon('check') + '</button></article>';
+      const tile = $('gallery-tile').content.cloneNode(true);
+      const video = asset.kind === 'video';
+      const open = tile.querySelector('.tile-open');
+      open.dataset.open = asset.id;
+      open.setAttribute('aria-label', 'Open ' + asset.title + (video ? ', video' : ''));
+      tile.querySelector('.caption').textContent = asset.title;
+
+      const image = tile.querySelector('img');
+      const preview = mediaUrls.get(video ? 'poster' : asset.source);
+      if (preview && !asset.missingPreview) {
+        image.src = preview;
+        tile.querySelector('.placeholder').remove();
+      } else {
+        image.remove();
+      }
+
+      const badge = tile.querySelector('.clip');
+      if (video) badge.append(asset.duration);
+      else badge.remove();
+
+      const check = tile.querySelector('.tile-check');
+      check.dataset.select = asset.id;
+      check.setAttribute('aria-label', 'Select ' + asset.title);
+      return tile;
     }
 
     function resetSelection() {
@@ -542,8 +595,12 @@
       $('viewer-prev').disabled = offset === 0;
       $('viewer-next').disabled = offset === items.length - 1;
       $('viewer-zoom').hidden = asset.kind === 'video';
-      $('viewer-download').href = media[asset.source];
-      $('viewer-download').download = asset.filename;
+      const sourceUrl = mediaUrls.get(asset.source);
+      const download = $('viewer-download');
+      download.hidden = !sourceUrl;
+      if (sourceUrl) download.href = sourceUrl;
+      else download.removeAttribute('href');
+      download.download = asset.filename;
       $('viewer-tags').replaceChildren(...asset.tags.map((tag) => {
         const button = document.createElement('button');
         button.className = 'control';
@@ -554,19 +611,22 @@
       }));
       if (!asset.tags.length) $('viewer-tags').textContent = 'Untagged';
 
-      if (asset.kind === 'video') {
+      if (!sourceUrl) {
+        showMediaError();
+      } else if (asset.kind === 'video') {
         const video = document.createElement('video');
         video.controls = true;
         video.playsInline = true;
         video.preload = 'metadata';
-        video.poster = media.poster;
-        video.src = media.video;
+        const poster = mediaUrls.get('poster');
+        if (poster) video.poster = poster;
+        video.src = sourceUrl;
         video.setAttribute('aria-label', asset.title);
         video.addEventListener('error', showMediaError);
         stage.append(video);
       } else {
         const image = document.createElement('img');
-        image.src = media[asset.source];
+        image.src = sourceUrl;
         image.alt = asset.title;
         image.addEventListener('error', showMediaError);
         image.addEventListener('dblclick', toggleZoom);
@@ -576,7 +636,8 @@
 
     function showMediaError() {
       const message = document.createElement('p');
-      message.textContent = 'Preview unavailable. Download the original to open it on your device.';
+      message.textContent = $('viewer-download').hidden
+        ? 'Preview unavailable.' : 'Preview unavailable. Download the original to open it on your device.';
       stage.replaceChildren(message);
       $('viewer-zoom').hidden = true;
     }
