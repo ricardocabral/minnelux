@@ -1,4 +1,9 @@
-# Minnelux
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/mkt/logo/horizontal/minnelux-dark.svg">
+    <img alt="Minnelux" src="docs/mkt/logo/horizontal/minnelux-light.svg" width="320" height="88">
+  </picture>
+</h1>
 
 [![Gitleaks](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -10,6 +15,10 @@ The standard app runs entirely in your browser. Self-hosting requires only stati
 - **Privacy.** Your browser connects directly to your storage and identity provider.
 - **Preservation.** Organize your library with tags while keeping the original files intact.
 - **Portability.** Keep the catalog and search index with your media so you can reopen the library in another browser or move it to another storage provider.
+
+## How it looks like
+
+[![Above the Clouds album with a cover, description, and dates](docs/screenshots/album.webp)](docs/screenshots/album.webp)
 
 ## Tutorial
 
@@ -25,6 +34,7 @@ The standard app runs entirely in your browser. Self-hosting requires only stati
 
 ## Reference
 
+- [Screenshots and feature reference](docs/prod/screenshots.md)
 - [Library compatibility and import limits](docs/prod/library-compatibility.md)
 - [Storage and library format specification](docs/dev/storage/SPEC.md)
 
