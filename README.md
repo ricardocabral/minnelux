@@ -3,15 +3,15 @@
 [![Gitleaks](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Minnelux is an early-stage, self-hosted web app for browsing, searching, and organizing a private photo and video archive. This repository currently contains prototypes and the [product specification](docs/prod/minnelux-prd.md).
+Minnelux is a self-hosted web app designed for browsing, searching, and organizing photos and videos in private cloud storage you control.
 
-- Keep your library in private object storage you own.
-- Serve the app over HTTPS as static files. The browser talks directly to your storage and identity provider.
-- Preserve original media and keep the library format portable.
+- **Privacy.** Your browser connects directly to your storage and identity provider.
+- **Preservation.** Organize your library with tags while keeping the original files intact.
+- **Portability.** Keep the catalog and search index with your media so you can reopen the library in another browser or move it to another storage provider.
 
 ## Local setup
 
-Install Node.js 22 or newer and run:
+With Node.js 22 or newer installed, clone the repository and start the catalog and search benchmark.
 
 ```sh
 git clone https://github.com/ricardocabral/minnelux.git
@@ -19,6 +19,29 @@ cd minnelux
 node spikes/snapshots/serve.mjs
 ```
 
-Open [the local benchmark](http://127.0.0.1:8782/) in a browser. The [Google Cloud Storage prototype](spikes/gcs/README.md) has separate setup instructions.
+Open the benchmark and select **Run benchmark** to try catalog and search with sample data. [Open localhost](http://127.0.0.1:8782/)
 
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+For cloud setup, use a static HTTPS host, a private bucket, and provider sign-in configured for your site's origin. [Google Cloud Storage and OAuth setup](docs/prod/minnelux-prd.md#google-account-sign-in-and-gcs-access)
+
+## Architecture
+
+### Browser, sign-in, and storage
+
+```mermaid
+flowchart LR
+    Host["Static HTTPS host"] -->|App files| Browser["Browser"]
+    Browser <-->|Sign-in| Identity["Identity provider"]
+    Browser <-->|Library reads and writes| Storage["Private object storage"]
+```
+
+### What the library stores
+
+```mermaid
+flowchart TD
+    Storage["Private object storage"] --> Media["Originals and previews"]
+    Storage --> Revision["Library revision"]
+    Revision --> Catalog["Catalog and tags"]
+    Revision --> Search["Search index"]
+```
+
+[Product specification](docs/prod/minnelux-prd.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
