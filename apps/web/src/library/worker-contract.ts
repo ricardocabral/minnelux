@@ -1,4 +1,5 @@
 import type { AssetV1, FlickrTime, LibraryIntent, PublishOptions, PublishResult, TagV1 } from './contract.ts'
+import type { S3Credentials } from '../storage/s3.ts'
 import type { Query } from '../search/contract.ts'
 
 export type LibraryOverview = { revisionId: string | null; baseToken: string; tags: TagV1[]; canWrite: boolean }
@@ -8,7 +9,19 @@ export type AssetRow = Pick<AssetV1, 'id' | 'filename' | 'mediaKind' | 'addedAt'
   capturedAt?: FlickrTime
   hasPreview: boolean
 }
-export type ConnectConfiguration = { bucket: string; clientId: string; prefix: string; access: 'read' | 'edit' }
+export type AuthorizedLibrarySource = {
+  bucket: string
+  prefix: string
+  expiresAt: number
+  canWrite: boolean
+} & ({ kind: 'gcs'; token: string } | { kind: 's3'; region: string; credentials: S3Credentials })
+
+export type WorkerStart = {
+  kind: 'start'
+  version: typeof libraryProtocolVersion
+  sessionId: string
+  source: { kind: 'sample' } | AuthorizedLibrarySource
+}
 
 export interface LibraryClient {
   open(signal?: AbortSignal): Promise<LibraryOverview>

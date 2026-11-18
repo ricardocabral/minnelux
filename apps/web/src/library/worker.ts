@@ -1,8 +1,9 @@
 import { createGcsStore } from '../storage/gcs.ts'
+import { record } from '../storage/io.ts'
 import { queryCatalog, searchTerms } from '../search/search.ts'
 import type { PostingsV1 } from '../search/contract.ts'
 import { createBrowserFixtureStore } from '../test-fixtures/browser-store.ts'
-import { resolveAlbumCover } from './catalog.ts'
+import { relativeKey, resolveAlbumCover } from './catalog.ts'
 import type { AssetV1, LibraryRepository, PinnedLibrary } from './contract.ts'
 import { createLibraryRepository } from './repository.ts'
 import {
@@ -10,20 +11,8 @@ import {
   type LibraryOperation,
   type LibraryReply,
   type LibraryRequest,
+  type WorkerStart,
 } from './worker-contract.ts'
-
-export type WorkerStart = {
-  kind: 'start'
-  sessionId: string
-  source: { kind: 'sample' } | {
-    kind: 'gcs'
-    bucket: string
-    prefix: string
-    token: string
-    expiresAt: number
-    canWrite: boolean
-  }
-}
 
 function failure(code: string) {
   return Object.assign(new Error(code), { code })
@@ -160,22 +149,51 @@ function serve(sessionId: string, repository: LibraryRepository, canWrite: boole
   }
 }
 
-let receive: ReturnType<typeof serve> | undefined
+async function startLibrary({ source, sessionId }: WorkerStart) {
+  if (source.kind === 'sample') {
+    if (import.meta.env.MODE === 'test') {
+      return serve(sessionId, createLibraryRepository(createBrowserFixtureStore()), true)
+    }
+    return undefined
+  }
+
+  const live = () => Date.now() < source.expiresAt
+  const store = source.kind === 'gcs'
+    ? createGcsStore(source.bucket, () => live() ? source.token : null)
+    : (await import('../storage/s3.ts')).createS3Store(
+      source.bucket, source.region, () => live() ? source.credentials : null,
+    )
+  return serve(sessionId, createLibraryRepository(store, { libraryPrefix: source.prefix }), source.canWrite)
+}
+
+function validSource(source: unknown): source is WorkerStart['source'] {
+  if (!record(source)) return false
+  if (source.kind === 'sample') return import.meta.env.MODE === 'test'
+  const {bucket, prefix, expiresAt, canWrite} = source
+  if (typeof bucket !== 'string' || !bucket || !relativeKey(prefix) ||
+      typeof expiresAt !== 'number' || !Number.isSafeInteger(expiresAt) || expiresAt <= 0 ||
+      typeof canWrite !== 'boolean') return false
+
+  const validCredential = (value: unknown) => typeof value === 'string' && /^[!-~]+$/.test(value)
+  if (source.kind === 'gcs') return validCredential(source.token)
+  if (source.kind !== 's3' || typeof source.region !== 'string' || !source.region ||
+      !record(source.credentials)) return false
+  const {accessKeyId, secretAccessKey, sessionToken} = source.credentials
+  return [accessKeyId, secretAccessKey, sessionToken].every(validCredential)
+}
+
+let receive: ReturnType<typeof startLibrary> | undefined
 
 self.addEventListener('message', ({ data }: MessageEvent<WorkerStart | LibraryRequest>) => {
   if (!data || typeof data !== 'object') return
   if ('kind' in data) {
-    if (receive || data.kind !== 'start') return
-    const { source, sessionId } = data
-    if (source.kind === 'sample') {
-      if (import.meta.env.MODE === 'test') {
-        receive = serve(sessionId, createLibraryRepository(createBrowserFixtureStore()), true)
-      }
-      return
-    }
-    const store = createGcsStore(source.bucket, () => Date.now() < source.expiresAt ? source.token : null)
-    receive = serve(sessionId, createLibraryRepository(store, { libraryPrefix: source.prefix }), source.canWrite)
+    if (receive || data.kind !== 'start' || data.version !== libraryProtocolVersion ||
+        typeof data.sessionId !== 'string' || !data.sessionId || !validSource(data.source)) return
+    receive = startLibrary(data).catch(() => {
+      reportError(new Error('The library worker could not start.'))
+      return undefined
+    })
     return
   }
-  void receive?.(data)
+  void receive?.then(handler => handler?.(data))
 })

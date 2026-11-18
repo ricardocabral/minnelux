@@ -1,20 +1,14 @@
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
-import { relativeKey } from './library/catalog.ts'
 import { connectLibraryClient } from './library/worker-client.ts'
-import type { ConnectConfiguration } from './library/worker-contract.ts'
-import type { WorkerStart } from './library/worker.ts'
+import { libraryProtocolVersion, type WorkerStart } from './library/worker-contract.ts'
+import { authorizeConnection, libraryPrefix, type ConnectionSettings } from './storage/connection.ts'
 import { endDurableSession, reportRejectedGrant, resumeDurableSession, startDurableSession } from './storage/durable-session.ts'
-import { authorizeGcsSession } from './storage/gcs-session.ts'
 import AppView from './ui/App.tsx'
 
-type OAuth = Parameters<typeof authorizeGcsSession>[0]['oauth']
-type GisWindow = Window & { google?: { accounts: { oauth2: OAuth } } }
-const gis = window as GisWindow
 const root = createRoot(document.getElementById('root')!)
-let active: { id: string; client: ReturnType<typeof connectLibraryClient>; close(): void; sample: boolean } | undefined
+let active: { id: string; client: ReturnType<typeof connectLibraryClient>; close(): void; kind: WorkerStart['source']['kind'] } | undefined
 let connecting: AbortController | undefined
-let loadingIdentity: Promise<void> | undefined
 let connectionNotice: string | undefined
 const durable = import.meta.env.VITE_DURABLE_GCS_SESSION === '1'
 let restoring = durable
@@ -42,7 +36,7 @@ function start(source: WorkerStart['source'], close: () => void = () => {},
   })
   active?.close()
   active = {
-    id, sample: source.kind === 'sample', client,
+    id, kind: source.kind, client,
     close() {
       client.close()
       worker.terminate()
@@ -52,60 +46,39 @@ function start(source: WorkerStart['source'], close: () => void = () => {},
   worker.addEventListener('error', () => {
     if (active?.id === id) connectionLost('The library process stopped. Connect again.')
   }, { once: true })
-  worker.postMessage({ kind: 'start', sessionId: id, source } satisfies WorkerStart)
+  worker.postMessage({ kind: 'start', version: libraryProtocolVersion, sessionId: id, source } satisfies WorkerStart)
   render()
 }
 
-async function connect(configuration: ConnectConfiguration) {
-  const prefix = configuration.prefix.trim().replace(/^\/+|\/+$/g, '') || 'library'
-  if (!relativeKey(prefix)) throw Object.assign(new Error('Invalid library prefix'), { code: 'invalidPrefix' })
-
-  if (durable) return startDurableSession({ ...configuration, prefix })
-
-  if (!gis.google?.accounts.oauth2) {
-    loadingIdentity ??= new Promise<void>((resolve, reject) => {
-      const script = document.createElement('script')
-      script.src = 'https://accounts.google.com/gsi/client'
-      script.async = true
-      script.onload = () => resolve()
-      script.onerror = () => {
-        script.remove()
-        loadingIdentity = undefined
-        reject(Object.assign(new Error('Google sign-in could not load'), { code: 'signInUnavailable' }))
-      }
-      document.head.append(script)
-    })
-    await loadingIdentity
-    throw Object.assign(new Error('Google sign-in is ready. Select Connect again.'), { code: 'signInReady' })
+async function connect(settings: ConnectionSettings) {
+  if (durable && settings.provider === 'gcs') {
+    return startDurableSession({ ...settings, prefix: libraryPrefix(settings.prefix) })
   }
-
   connecting?.abort()
   const attempt = new AbortController()
   connecting = attempt
   try {
-    const session = await authorizeGcsSession({
-      oauth: gis.google.accounts.oauth2,
-      clientId: configuration.clientId,
-      bucket: configuration.bucket,
-      access: configuration.access === 'edit' ? 'editor' : 'viewer',
-      signal: attempt.signal,
-    })
+    const session = await authorizeConnection(settings, attempt.signal)
     if (attempt.signal.aborted) {
       session.close()
       return
     }
-    const expiry = setTimeout(() => connectionLost('The session expired. Connect again.'), Math.max(0, session.expiresAt - Date.now()))
-    start({
-      kind: 'gcs',
-      bucket: configuration.bucket,
-      prefix,
-      token: session.getToken(),
-      expiresAt: session.expiresAt,
-      canWrite: session.access === 'editor',
-    }, () => {
+    const expiry = setTimeout(
+      () => connectionLost('The session expired. Connect again.'),
+      Math.max(0, session.source.expiresAt - Date.now()),
+    )
+    function close() {
       clearTimeout(expiry)
       session.close()
-    })
+    }
+    try {
+      start(session.source, close)
+    } catch (error) {
+      close()
+      throw error
+    }
+  } catch (error) {
+    if (!attempt.signal.aborted) throw error
   } finally {
     if (connecting === attempt) connecting = undefined
   }
@@ -168,16 +141,17 @@ function render() {
   root.render(<HashRouter><AppView
     key={active?.id ?? 'connect'}
     client={active?.client}
-    isFixture={active?.sample}
+    isFixture={active?.kind === 'sample'}
     durable={durable}
     checkingConnection={restoring}
     onRetrySignOut={retrySignOut ? () => void signOut() : undefined}
     onConnect={connect}
+    onCancelConnect={() => connecting?.abort()}
     onOpenFixture={import.meta.env.MODE === 'test' ? () => {
       connecting?.abort()
       start({ kind: 'sample' })
     } : undefined}
-    onDisconnect={durable && !active?.sample ? () => void signOut() : () => disconnect()}
+    onDisconnect={durable && active?.kind === 'gcs' ? () => void signOut() : () => disconnect()}
     connectionNotice={connectionNotice}
   /></HashRouter>)
 }

@@ -22,7 +22,9 @@ test('releases a query result when cancellation reaches the worker after its rep
     }
 
     try {
-      worker.postMessage({ kind: 'start', sessionId: envelope.sessionId, source: { kind: 'sample' } })
+      worker.postMessage({ kind: 'start', version: 0, sessionId: 'old-protocol', source: { kind: 'sample' } })
+      worker.postMessage({ kind: 'start', version: envelope.version, sessionId: envelope.sessionId, source: null })
+      worker.postMessage({ kind: 'start', version: envelope.version, sessionId: envelope.sessionId, source: { kind: 'sample' } })
       await request('open', null, 'open')
       const query = await request('query', {}, 'query') as { value: { handle: string } }
       worker.postMessage({ ...envelope, requestId: 'cancel-query', operation: 'cancel', input: { requestId: 'query' } })

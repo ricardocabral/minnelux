@@ -1,7 +1,22 @@
+import { createRequire } from 'node:module'
 import { defineConfig } from 'vite'
+
+const require = createRequire(import.meta.url)
 
 export default defineConfig(({ mode }) => ({
   base: './',
+  worker: { format: 'es' },
+  optimizeDeps: {
+    // Avoid reloading the dev app when the first authorized worker loads the SDK.
+    include: ['@aws-sdk/client-cognito-identity', '@aws-sdk/client-s3'],
+  },
+  resolve: {
+    alias: [{
+      // The SDK browser entry uses DOMParser, which is unavailable in workers.
+      find: /^@aws-sdk\/xml-builder$/,
+      replacement: require.resolve('@aws-sdk/xml-builder'),
+    }],
+  },
   build: { outDir: mode === 'test' ? 'dist-test' : mode === 'session-test' ? 'dist-session-test' : 'dist' },
   ...(mode === 'session-test' && { define: { 'import.meta.env.VITE_DURABLE_GCS_SESSION': '"1"' } }),
   plugins: mode === 'test' ? [{
