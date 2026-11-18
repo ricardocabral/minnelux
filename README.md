@@ -1,6 +1,6 @@
 # Minnelux
 
-[![Checks](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml)
+[![Gitleaks](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/ricardocabral/minnelux/actions/workflows/checks.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Minnelux is an early-stage, self-hosted web app for browsing, searching, and organizing a private photo and video archive. This repository currently contains prototypes and the [product specification](docs/prod/minnelux-prd.md).
@@ -16,7 +16,6 @@ Install Node.js 22 or newer and run:
 ```sh
 git clone https://github.com/ricardocabral/minnelux.git
 cd minnelux
-node --test spikes/flickr/reconcile.test.mjs
 node spikes/snapshots/serve.mjs
 ```
 
