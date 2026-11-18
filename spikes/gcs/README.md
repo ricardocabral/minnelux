@@ -37,27 +37,46 @@ Actual token expiration, a signed-in user without bucket IAM, and desktop and mo
 
 ## Redeploy
 
-The Firebase site serves the probe at `/` and the [Flickr importer](https://minnelux.web.app/flickr-import/) at `/flickr-import/`. Firebase Hosting replaces the site's complete file set on each deploy. Stage both from the intended commit before publishing. Run from the repository root with Node.js 22 or later and the Firebase CLI signed in as a project administrator.
+Firebase Hosting replaces the site's complete file set on each deploy. Stage the probe at `/`, the [Flickr importer](https://minnelux.web.app/flickr-import/) at `/flickr-import/`, and the static web client at `/web/`. Choose the intended importer and probe revision. The shared site uses a GCS-only web build, so choose its revision separately. The example pins the last default-branch commit before the S3 connector. Verify every route's files and headers before deploying. Run from the repository root with Node.js 24 or later and the Firebase CLI signed in as a project administrator.
 
 ```sh
 stage=$(mktemp -d)
-git archive HEAD apps/flickr-import spikes/flickr spikes/gcs | tar -x -C "$stage"
+web_ref=fb380709396ca4e7d98e94d217b81dc6953b71c6
+mkdir -p "$stage/web-source" &&
+git archive HEAD apps/flickr-import spikes/flickr spikes/gcs | tar -x -C "$stage" &&
+git archive "$web_ref" apps/flickr-import apps/web docs/mkt/logo | tar -x -C "$stage/web-source" &&
 (
   cd "$stage/apps/flickr-import" &&
   npm ci &&
   npm test &&
   npm run build
 ) &&
-cp -R "$stage/apps/flickr-import/dist" "$stage/spikes/gcs/public/flickr-import" &&
 (
-  cd "$stage/spikes/gcs" &&
-  firebase deploy --project minnelux --only hosting
-)
+  cd "$stage/web-source/apps/web" &&
+  npm ci &&
+  npm run build
+) &&
+cp -R "$stage/apps/flickr-import/dist" "$stage/spikes/gcs/public/flickr-import" &&
+cp -R "$stage/web-source/apps/web/dist" "$stage/spikes/gcs/public/web"
 ```
 
-After publishing, load both paths and verify the browser can load their scripts. Check the importer response for its Content Security Policy, including the Security Token Service endpoint and `frame-ancestors 'none'`. If either path regresses, roll back to the prior version in the Firebase Hosting release history. [Firebase Hosting rollback](https://firebase.google.com/docs/hosting/manage-hosting-resources#roll-back-release)
+For the static GCS web client, add this entry to `hosting.headers` in the staged `firebase.json`. Keep the existing rules for the probe, importer, and shared headers. Before staging a web build that offers Amazon S3, configure its bucket and Cognito endpoints and verify connections to both providers. [S3 browser access](../../docs/prod/connect-amazon-s3.md#configure-browser-access)
 
-Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
+```json
+{
+  "source": "/web{,/**}",
+  "headers": [
+    {
+      "key": "Content-Security-Policy",
+      "value": "default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://accounts.google.com/gsi/ https://openidconnect.googleapis.com https://storage.googleapis.com; frame-src https://accounts.google.com/gsi/; style-src 'self' https://accounts.google.com/gsi/style; img-src 'self' blob:; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'"
+    }
+  ]
+}
+```
+
+From `$stage/spikes/gcs`, run `firebase deploy --project minnelux --only hosting`. Load each staged route and check that its scripts load. Check the app and worker responses for their Content Security Policy, including `frame-ancestors 'none'` and the Security Token Service endpoint for the importer. If a route regresses, roll back to the prior version in the Firebase Hosting release history. [Firebase Hosting rollback](https://firebase.google.com/docs/hosting/manage-hosting-resources#roll-back-release)
+
+Follow the [Google Cloud Storage guide](../../docs/prod/connect-google-cloud-storage.md#prepare-storage-and-sign-in) to register the site origin and grant bucket access.
 
 The fixtures can be generated with FFmpeg.
 

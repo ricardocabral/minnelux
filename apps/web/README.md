@@ -1,104 +1,47 @@
-# Minnelux web client
+# Run or self-host the Minnelux web client
 
-Run the reference app from this directory with Node.js 24 or later.
+To open a private GCS library without running a server, use the [hosted web client](https://minnelux.web.app/web/). [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md)
+
+## Run locally
+
+From the repository root, run with Node.js 24 or later:
 
 ```sh
+cd apps/web
 npm ci
-npm run dev
+npm run dev -- --host localhost
 ```
 
-For a private GCS connection, use a test bucket and a Google OAuth client
-registered for the app's origin. Follow the project's GCS setup and HTTPS
-requirements. The reference flow opens a revision, displays previews and
-saved Flickr details, and publishes a JPEG with tags. Reopen the library
-and search for the photo. Use a separate test library during this stage. The
-web client writes v2 manifests, and the standalone Flickr importer opens
-v1 manifests. [GCS setup](../../docs/prod/minnelux-prd.md#google-account-sign-in-and-gcs-access)
+Open the localhost URL printed by Vite. Connect a private library using the setup guide for your provider. If the app says Google sign-in is ready, select **Connect to Google Cloud Storage** again. [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md) · [Amazon S3 setup](../../docs/prod/connect-amazon-s3.md) · [Sample library tutorial](../../docs/prod/first-library.md)
 
-For the Amazon S3 photo workflow, use the regular static build. Choose
-**Amazon S3** on the connection screen and follow the
-[Cognito and S3 setup guide](../../docs/prod/connect-amazon-s3.md).
-Use a separate test bucket and synthetic photos. Register the exact deployed
-`cognito-callback.html` URL, including the app's base path. For local development,
-run `npm run dev -- --host localhost` and register
-`http://localhost:5173/cognito-callback.html` if Vite uses port 5173.
+## Self-host the web client
 
-```sh
-npm run check
-npm test
-npm run build
-npx playwright install chromium
-npm run test:browser
-```
+From `apps/web`, run `npm ci` and `npm run build` with Node.js 24 or later. Serve `dist/` from a dedicated HTTPS origin. Apply the [deployment security requirements](../../docs/prod/minnelux-prd.md#security-requirements) and register the public origin with your sign-in provider. [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md) · [Amazon S3 setup](../../docs/prod/connect-amazon-s3.md)
 
-Browser tests use synthetic photos and local fixtures, including simulated
-Cognito and S3 responses through the real browser SDK. The regular build writes
-the static site to `dist/`. The browser tests build in `dist-test/` and start a
-local fixture server. The [implementation plan](../../plans/web-client.md)
-tracks real provider and private video verification.
+For browser-only Google sign-in, allow Google Identity Services scripts, styles, and frames from `https://accounts.google.com/gsi/`. Allow connections to that path, `https://openidconnect.googleapis.com`, and `https://storage.googleapis.com`. Allow same-origin workers and blob images. Set `Cross-Origin-Opener-Policy: same-origin-allow-popups` for sign-in.
+
+Open your deployed URL, connect using a private test bucket, and verify that you can open a photo. [Project Firebase Hosting runbook](../../spikes/gcs/README.md#redeploy)
 
 ## Stay connected across reloads
 
-The static build uses browser-only Google authorization. To enable durable
-sessions, deploy the opt-in Node server and build the web client for it. Host
-both on a dedicated HTTPS origin you control. The server encrypts the
-session records it stores in SQLite on a persistent local disk. Use one server instance for
-that database. The browser keeps the session ID in a Secure, HttpOnly cookie
-and receives only short-lived access tokens for direct GCS requests.
+Use the optional Google session server to restore a GCS connection after a reload. Deploy the app and server on the same dedicated HTTPS origin. Run one server instance with a private, persistent SQLite database. The server encrypts saved session records and the browser keeps the session ID in a Secure, HttpOnly cookie. Storage requests still go directly from the browser to GCS.
 
-1. Create a Google OAuth **Web application** client for the session server.
-   Register the exact redirect URI
-   `https://photos.example.com/api/minnelux-session/callback`. Configure the
-   consent screen and add your Google account to the test audience if needed.
-   Google may expire refresh tokens after seven days while the app is in
-   Testing. Scope and bucket IAM requirements match the existing web client.
-   [Google OAuth setup](https://developers.google.com/identity/protocols/oauth2/web-server)
-2. Build with `VITE_DURABLE_GCS_SESSION=1 npm run build`. Vite must receive only
-   the public flag. Keep the client secret and encryption key in the server's
-   secret store. Generate the key once with
-   `node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'`.
-3. Set these environment variables for `npm run serve:session` from
-   `apps/web`. Keep the database in a directory private to the service user
-   and outside the asset tree.
+1. Create a Google OAuth **Web application** client with the exact redirect URI `https://photos.example.com/api/minnelux-session/callback`, using your own origin. The callback path is the same when the app runs under a subpath. Use the [Google consent and bucket IAM setup](../../docs/prod/connect-google-cloud-storage.md#prepare-storage-and-sign-in). [Google OAuth web server setup](https://developers.google.com/identity/protocols/oauth2/web-server)
+2. From `apps/web`, run `npm ci` and `VITE_DURABLE_GCS_SESSION=1 npm run build`. Only the public flag belongs in the frontend build. Generate the server's encryption key once with `node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'`.
+3. Set the following environment variables and run `npm run serve:session` from `apps/web`. Keep the key and client secret in the server's secret store. Keep the database outside the asset tree.
 
    | Variable | Value |
-   |---|---|
-   | `MINNELUX_ORIGIN` | Exact HTTPS origin, such as `https://photos.example.com` |
+   | --- | --- |
+   | `MINNELUX_ORIGIN` | Exact HTTPS origin such as `https://photos.example.com` |
    | `MINNELUX_APP_PATH` | App path with a trailing slash. Defaults to `/`. |
-   | `MINNELUX_SESSION_DB` | Absolute path to a database on the persistent disk |
-   | `MINNELUX_SESSION_KEY` | The generated 32-byte key in base64url |
-   | `GOOGLE_OAUTH_CLIENT_ID` | Client ID from the first step |
-   | `GOOGLE_OAUTH_CLIENT_SECRET` | Client secret from the first step |
+   | `MINNELUX_SESSION_DB` | Absolute path to the database on persistent disk |
+   | `MINNELUX_SESSION_KEY` | Generated 32-byte base64url key |
+   | `GOOGLE_OAUTH_CLIENT_ID` | Session server's OAuth client ID |
+   | `GOOGLE_OAUTH_CLIENT_SECRET` | Session server's OAuth client secret |
 
-4. Terminate TLS at a reverse proxy and forward the app and
-   `/api/minnelux-session/` to the process. It listens on `127.0.0.1:4180` by
-   default. Use `PORT` to change the port. Preserve cookies, the request
-   Origin header, and the response cache policy. Exclude all session API
-   routes from caching. Suppress URL query strings, cookies, authorization
-   headers, and request and response bodies in session API logs, including
-   ingress and error diagnostics. The callback query carries the short-lived
-   authorization code. Use a proxy that forwards the named cookies unchanged.
-   Firebase Hosting rewrites only forward the `__session` cookie, so this
-   service needs a separate HTTPS ingress. Apply per-source rate limits to
-   the session API at the proxy, especially sign-in start and callback. The
-   application accepts at most 256 concurrent sign-in attempts per instance.
-5. Connect to your test library and reload the page while the gallery is open.
-   The gallery should open without prompting for consent again. Use
-   **Disconnect** to end the saved session, then reload and check that the
-   connect form returns.
+4. Terminate TLS at a reverse proxy and forward the app and `/api/minnelux-session/` to the service, which listens on `127.0.0.1:4180` by default. Preserve cookies, the request `Origin` header, and response cache policies. Disable caching for the session API and rate-limit sign-in start and callback requests. Suppress query strings, cookies, authorization headers, and bodies in session API logs, including ingress and error logs. Use an ingress that forwards the named cookies. [Firebase Hosting forwards only the `__session` cookie to Cloud Run and Cloud Functions](https://firebase.google.com/docs/hosting/manage-cache#using_cookies).
+5. Connect to a test library and reload the gallery. It should reopen without another consent prompt. Choose **Disconnect**, reload, and confirm the connect form returns.
 
-A saved session lasts at most seven days. The server can renew the access
-token when a page reloads. A tab left open past its access token deadline asks
-you to reload. If Google Storage rejects the access token early, Minnelux
-marks that token for renewal and asks you to reload. Disconnect deletes the
-saved session and clears this tab.
-Other tabs holding an access token keep it until its deadline. To revoke
-Google's grant, remove the app from your Google Account. All sessions end
-when you replace the encryption key and start with a fresh session database.
-Keep routine disk backups under the same access policy as the live database.
-The app serves a static build without durable sessions when the opt-in flag
-is absent.
+A saved session lasts at most seven days. Google can also expire refresh tokens after seven days for an External OAuth app in Testing. Reload if the app reports an expired or rejected access token. **Disconnect** removes the saved session. Other tabs can use an issued access token until it expires. To revoke the app's grant, remove it from your Google Account. Starting with a fresh database and a new encryption key ends all saved sessions. Protect database backups with the same access policy as the live database.
 
-Run `npm run test:session` after installing Playwright Chromium. This test
-requires OpenSSL to generate a temporary local HTTPS certificate. It uses
-the real session server and synthetic Google and GCS responses.
+[Developer checks](../../AGENTS.md#verify-the-affected-path)

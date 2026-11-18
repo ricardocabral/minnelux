@@ -25,6 +25,8 @@ The first release opens one library at a time, with one portable library per buc
 
 ## 3. Browser architecture
 
+This section describes the product design. See [library compatibility](library-compatibility.md) for the apps, providers, and formats available in a given build.
+
 ```mermaid
 flowchart LR
     Host["Static HTTPS host"] --> UI["Browser UI"]
@@ -74,15 +76,17 @@ The provider adapters use native optimistic write preconditions. In S3, retain t
 
 ### Google account sign-in and GCS access
 
-Register a Google OAuth web application client with each deployed site's exact authorized JavaScript origin and configure its consent screen. Self-hosters can register their own OAuth client ID. For a personal Gmail account, use an external audience and add the owner as a test user while the app is in Testing. Public distribution is subject to Google's publishing and verification requirements. Use a Google account with narrowly scoped effective storage IAM, including inherited grants. Grant Storage Object Viewer for browsing. For editing, configure the permissions needed to create originals and snapshots and replace `head.json`. GCS requires both create and delete permissions to replace an object, so scope the delete grant to the head. A bucket-level Storage Object User role also grants deletion of originals. [Google OAuth client registration](https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid) · [OAuth audience settings](https://support.google.com/cloud/answer/15549945?hl=en) · [GCS IAM roles](https://docs.cloud.google.com/storage/docs/access-control/iam-roles) · [GCS overwrite permissions](https://docs.cloud.google.com/storage/docs/json_api/v1/objects/insert)
+For bucket IAM, OAuth client registration, and connecting an app, follow the [Google Cloud Storage setup guide](connect-google-cloud-storage.md).
 
 On a user click, the Google Identity Services token client opens Google's account and consent dialog and returns an OAuth access token to the browser. Request `devstorage.read_only` for browsing or `devstorage.read_write` for editing. Set `include_granted_scopes: false` for a read-only request and check the granted scope before enabling writes. The OAuth scope limits operations on all resources the account can access through IAM. The browser sends `Authorization: Bearer <access-token>` to the Cloud Storage JSON API. For example, `GET /storage/v1/b/{bucket}/o/{encoded-object}?alt=media` returns private object bytes when the scope and bucket IAM both allow it. Google hosts the identity flow. The app uses its public OAuth client ID and serves static files. Use the returned expiration to prompt for renewal. Request a replacement token through a new user action when needed. [Google browser token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model) · [Token client options](https://developers.google.com/identity/oauth2/web/reference/js-reference#datatype-tokenclientconfig) · [Cloud Storage OAuth scopes](https://docs.cloud.google.com/storage/docs/oauth-scopes) · [Authenticated object reads](https://docs.cloud.google.com/storage/docs/json_api/v1/objects/get)
+
+The standalone Flickr importer exchanges the Google access token for one restricted to the selected library prefix. For imports, the restricted token can create library objects and replace the head within the account's IAM permissions. [Google Credential Access Boundaries](https://docs.cloud.google.com/iam/docs/downscoping-short-lived-credentials)
 
 The GCS reference path uses the GIS browser token model to meet the static deployment requirement. This exposes a bearer token to app JavaScript. The IETF browser guidance calls for authorization code with PKCE, and Google's documented GIS code flow requires a backend. Record this tradeoff in the deployment guide. [Google authorization models](https://developers.google.com/identity/oauth2/web/guides/choose-authorization-model) · [IETF browser OAuth requirements](https://www.rfc-editor.org/rfc/rfc10017.html#section-7.1)
 
 #### Optional durable Google sessions
 
-An owner can deploy a same-origin session service to keep GCS connected across reloads. The service uses the OAuth authorization code flow with PKCE and stores the Google refresh token on the server. The browser receives an opaque session cookie and holds the short-lived access token in memory. The service binds the session to the Google subject, bucket, prefix, and access mode. After a reload, a valid session reopens the pinned library configuration. Sign-out invalidates the server session. [Setup](../../apps/web/README.md) · [OAuth token-mediating backend](https://www.rfc-editor.org/rfc/rfc10017.html#section-6.2)
+An owner can deploy a same-origin session service to keep GCS connected across reloads. The service uses the OAuth authorization code flow with PKCE and stores the Google refresh token on the server. The browser receives an opaque session cookie and holds the short-lived access token in memory. The service binds the session to the Google subject, bucket, prefix, and access mode. After a reload, a valid session reopens the pinned library configuration. Sign-out invalidates the server session. [Session server setup](../../apps/web/README.md#stay-connected-across-reloads) · [OAuth token-mediating backend](https://www.rfc-editor.org/rfc/rfc10017.html#section-6.2)
 
 ### Private media delivery
 
