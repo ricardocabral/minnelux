@@ -4,7 +4,7 @@
 
 The private test bucket is `minnelux-browser-proof-703092535958` in the `minnelux` Google Cloud project. It contains a synthetic JPEG and a 96-second, fast-start H.264 MP4. The page makes publication test writes under a fresh `proof/runs/<uuid>/` prefix on each run.
 
-The deployed page includes the public OAuth client ID for its HTTPS origin. The Google Auth Platform audience is External in Testing, with `rnc000@gmail.com` as its only listed test user.
+The deployed page includes the public OAuth client ID for its HTTPS origin. The Google Auth Platform audience is External in Testing, with one allowlisted test account.
 
 ## Run the checks
 
