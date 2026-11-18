@@ -106,6 +106,32 @@ test('opens the shipped v1 Flickr shape and resolves an album cover only against
   assert.equal(trace.some(key => key.includes('/index/') || key.includes('/originals/')), false)
 })
 
+test('reads a large original without a preview and rejects same-size corruption', async () => {
+  const {store, objects} = memoryStore()
+  const repository = createLibraryRepository(store)
+  const base = await repository.open()
+  const bytes = Buffer.concat([jpeg, Buffer.alloc(4 * 1024 * 1024)])
+  const result = await repository.publish({
+    kind: 'import-photo', baseToken: base.baseToken, operationId: crypto.randomUUID(),
+    file: new File([bytes], 'Archive.jpg', {type: 'image/jpeg'}),
+    addedAt: '2026-11-18T12:00:00.000Z', tagTitles: [],
+  })
+  assert.equal(result.status, 'published')
+
+  const pin = await repository.open()
+  const [asset] = pin.catalog.assets
+  assert.deepEqual(asset!.previews, [])
+  const original = await repository.readOriginal(pin, asset!.id)
+  assert.equal(original.type, 'image/jpeg')
+  assert.deepEqual(Buffer.from(await original.arrayBuffer()), bytes)
+
+  const key = 'library/originals/' + digest(bytes)
+  const stored = objects.get(key)!
+  const changed = new Blob([stored.body.slice(0, -1), Uint8Array.of(1)])
+  objects.set(key, {...stored, body: changed})
+  await assert.rejects(repository.readOriginal(pin, asset!.id), {code: 'integrity'})
+})
+
 test('upgrades v1 on a targeted edit and preserves metadata, originals, old revisions and Flickr receipts', async t => {
   const {store, objects} = await fixtureStore()
   const before = new Map(objects)

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 
@@ -58,6 +59,43 @@ test('browses the sample collection and opens authorized Flickr details', async 
   expect(remoteMedia).toEqual([])
 })
 
+test('downloads the stored photo original from the viewer footer', async ({ page, context }) => {
+  let originalReads = 0
+  await context.route(
+    url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/originals/')),
+    async route => {
+      originalReads++
+      if (originalReads === 1) await route.fulfill({ status: 404 })
+      else await route.continue()
+    },
+  )
+
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open sample library' }).click()
+  await page.getByRole('button', { name: 'Open Forêt' }).click()
+  const viewer = page.getByRole('dialog', { name: 'Forêt' })
+  await expect(viewer.getByRole('img', { name: 'Forêt' })).toBeVisible()
+  const footer = viewer.locator('footer')
+  await footer.getByRole('button', { name: 'Zoom in' }).click()
+  await expect(footer.getByRole('button', { name: 'Fit image' })).toBeVisible()
+
+  const downloadButton = footer.getByRole('button', { name: 'Download original' })
+  await expect(downloadButton).toBeEnabled()
+  expect(originalReads).toBe(0)
+  await downloadButton.focus()
+  await page.keyboard.press('Enter')
+  await expect(footer.getByRole('alert')).toBeVisible()
+  await expect(downloadButton).toBeFocused()
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Enter')])
+  expect(originalReads).toBe(2)
+  expect(download.suggestedFilename()).toBe('source.jpg')
+  expect(await readFile(await download.path())).toEqual(await readFile(
+    new URL('../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url),
+  ))
+  await expect(footer.getByRole('alert')).toHaveCount(0)
+})
+
 test.describe('narrow gallery', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: 'Pacific/Honolulu' })
 
@@ -69,6 +107,9 @@ test.describe('narrow gallery', () => {
     const tile = page.getByRole('button', { name: 'Open Forêt' })
     await tile.tap()
     const viewer = page.getByRole('dialog', { name: 'Forêt' })
+    const footer = viewer.locator('footer')
+    await expect(footer.getByRole('button', { name: 'Zoom in' })).toBeInViewport()
+    await expect(footer.getByRole('button', { name: 'Download original' })).toBeInViewport()
     const details = viewer.getByRole('button', { name: 'Details', exact: true })
     await expect(details).toHaveAttribute('aria-expanded', 'false')
     await details.tap()

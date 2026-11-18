@@ -112,7 +112,10 @@ dialog::backdrop { background: #0b2118a1; }
 .viewer-caption { min-width: 0; }
 .viewer-caption h2 { font: 500 clamp(1.24rem, 3vw, 1.72rem)/1.08 var(--serif); overflow-wrap: anywhere; }
 .viewer-caption p { color: #c4d2c7; font-size: .84rem; margin-top: 4px; }
-.viewer-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
+.viewer-tools { display: grid; justify-items: end; gap: 6px; }
+.viewer-tool-buttons { display: flex; gap: 8px; }
+.viewer-tool-buttons button[aria-disabled="true"] { cursor: default; opacity: .42; }
+.viewer-tools p { max-width: 24ch; text-align: end; font-size: .84rem; }
 .viewer-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 1120px) {
   .top { grid-template-columns: 190px minmax(180px, 1fr) auto; gap: 20px; padding-inline: 23px; }
@@ -146,8 +149,7 @@ dialog::backdrop { background: #0b2118a1; }
   .viewer-stage { padding: 5px; gap: 4px; grid-template-columns: 36px minmax(0,1fr) 36px; }
   .viewer-stage .icon-button { width: 35px; min-height: 42px; }
   .viewer-footer { padding: 9px 10px; gap: 5px; min-height: 64px; }
-  .viewer-tools { gap: 4px; }
-  .viewer-tools .control { padding: 0 7px; white-space: normal; font-size: .8rem; }
+  .viewer-tool-buttons { gap: 4px; }
   .viewer-info { position: absolute; inset: auto 0 0; max-height: 75%; width: auto; z-index: 1; border: 1px solid #ffffff38; border-radius: 12px 12px 0 0; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }

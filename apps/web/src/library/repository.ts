@@ -1,7 +1,8 @@
+import { sha256 } from '@noble/hashes/sha2.js'
 import { buildPostings, validatePostings } from '../search/search.ts'
 import type { ObjectStore, WriteCondition } from '../storage/contract.ts'
 import { boundedBody, checkCancellation, record } from '../storage/io.ts'
-import { addedDatePattern, hashPattern, previewTypes, relativeKey, validateCatalog } from './catalog.ts'
+import { addedDatePattern, hashPattern, previewTypes, relativeKey, validateCatalog, validateMediaReference } from './catalog.ts'
 import type {
   CatalogV1, IndexLoad, LibraryIntent, LibraryRepository, PinnedLibrary,
   PublishFailure, PublishResult, StoredObjectRef, TagV1,
@@ -74,7 +75,17 @@ function hex(bytes: Uint8Array): string {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-async function hash(value: Blob | string): Promise<string> {
+async function hash(value: Blob | string, signal?: AbortSignal): Promise<string> {
+  if (value instanceof Blob && value.size > 4 * 1024 * 1024) {
+    const digest = sha256.create()
+    const chunkSize = 1024 * 1024
+    for (let offset = 0; offset < value.size; offset += chunkSize) {
+      checkCancellation(signal)
+      const chunk = await value.slice(offset, offset + chunkSize).arrayBuffer()
+      digest.update(new Uint8Array(chunk))
+    }
+    return hex(digest.digest())
+  }
   const bytes = typeof value === 'string' ? utf8.encode(value) : await value.arrayBuffer()
   return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
 }
@@ -241,9 +252,13 @@ export function createLibraryRepository(
   const keyFor = (key: string) => libraryPrefix ? libraryPrefix + '/' + key : key
   const pins = new WeakMap<PinnedLibrary, PinState>()
 
-  async function storedBytes(ref: Descriptor, signal?: AbortSignal): Promise<Blob> {
+  async function storedBytes(
+    ref: Pick<StoredObjectRef, 'key' | 'byteLength' | 'sha256'>,
+    signal?: AbortSignal,
+    key = keyFor(ref.key),
+  ): Promise<Blob> {
     checkCancellation(signal)
-    const response = await store.read(keyFor(ref.key), {signal})
+    const response = await store.read(key, {signal})
     checkCancellation(signal)
     if (response.byteLength !== undefined && response.byteLength !== ref.byteLength) {
       await response.body.cancel().catch(() => undefined)
@@ -257,7 +272,7 @@ export function createLibraryRepository(
       if (code === 'invalidResponse' || code === 'limit') fail('integrity')
       throw error
     }
-    assertCondition(await hash(bytes) === ref.sha256, 'integrity')
+    if (ref.sha256) assertCondition(await hash(bytes, signal) === ref.sha256, 'integrity')
     checkCancellation(signal)
     return bytes
   }
@@ -353,6 +368,15 @@ export function createLibraryRepository(
     checkCancellation(signal)
     state.indexes.set(kind, result)
     return result
+  }
+
+  async function readOriginal(pin: PinnedLibrary, assetId: string, signal?: AbortSignal): Promise<Blob> {
+    checkCancellation(signal)
+    const ref = pins.get(pin)?.catalog.assets.find(asset => asset.id === assetId)?.original
+    assertCondition(validateMediaReference(ref, 'original', mediaRoots), 'invalidReference')
+    const root = ref.root === 'library' ? libraryPrefix : mediaRoots.get(ref.root)
+    const bytes = await storedBytes(ref, signal, root ? root + '/' + ref.key : ref.key)
+    return bytes.slice(0, bytes.size, ref.mimeType)
   }
 
   async function readPreview(pin: PinnedLibrary, assetId: string, signal?: AbortSignal): Promise<Blob | undefined> {
@@ -530,5 +554,5 @@ export function createLibraryRepository(
     }
   }
 
-  return {open, loadIndex, readPreview, publish}
+  return {open, loadIndex, readOriginal, readPreview, publish}
 }

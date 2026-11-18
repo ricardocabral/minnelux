@@ -15,6 +15,7 @@ export interface LibraryClient {
   query(query: Query, signal?: AbortSignal): Promise<ResultHandle>
   readRange(handle: string, offset: number, limit: number, signal?: AbortSignal): Promise<AssetRow[]>
   readAsset(handle: string, assetId: string, signal?: AbortSignal): Promise<AssetV1>
+  readOriginal(handle: string, assetId: string, signal?: AbortSignal): Promise<Blob>
   readPreview(assetId: string, signal?: AbortSignal): Promise<Blob | undefined>
   readAlbumCover(tagId: string, signal?: AbortSignal): Promise<Blob | undefined>
   release(handle: string): Promise<void>
@@ -28,6 +29,7 @@ export type LibraryRequests = {
   query: { input: Query; output: ResultHandle }
   readRange: { input: { handle: string; offset: number; limit: number }; output: AssetRow[] }
   readAsset: { input: { handle: string; assetId: string }; output: AssetV1 }
+  readOriginal: { input: { handle: string; assetId: string }; output: Blob }
   readPreview: { input: { assetId: string }; output: Blob | undefined }
   readAlbumCover: { input: { tagId: string }; output: Blob | undefined }
   release: { input: { handle: string }; output: void }
