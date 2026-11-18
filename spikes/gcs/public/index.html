@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Minnelux browser proof</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <script type="module" src="./probe.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Minnelux browser proof</h1>
+      <p>Read and write a private Google Cloud Storage bucket from a static page.</p>
+      <form id="connection">
+        <label>Google OAuth web client ID <input name="client" required autocomplete="off"></label>
+        <label>Private test bucket <input name="bucket" value="minnelux-browser-proof-703092535958" required autocomplete="off"></label>
+        <div class="buttons">
+          <button name="access" value="read">Sign in for reading</button>
+          <button name="access" value="write">Sign in for writing</button>
+        </div>
+      </form>
+      <p id="session" role="status">Signed out</p>
+      <div class="buttons">
+        <button id="anonymous">Check signed-out denial</button>
+        <button id="photo">Read JPEG</button>
+        <button id="publication">Check publication</button>
+        <button id="video">Open video</button>
+        <button id="seek">Seek to 75%</button>
+        <button id="reconnect">Drop local token</button>
+      </div>
+      <img id="preview" alt="Synthetic private JPEG" hidden>
+      <video id="player" controls playsinline preload="none" hidden></video>
+      <h2>Evidence</h2>
+      <pre id="evidence" aria-live="polite"></pre>
+    </main>
+  </body>
+</html>

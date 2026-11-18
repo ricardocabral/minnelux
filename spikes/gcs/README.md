@@ -1,0 +1,30 @@
+# GCS browser proof
+
+[Open the HTTPS probe](https://minnelux.web.app). The page uses Google Identity Services and the Cloud Storage JSON API. Firebase Hosting serves its static files.
+
+The private test bucket is `minnelux-browser-proof-703092535958` in the `minnelux` Google Cloud project. It contains a synthetic JPEG and a 96-second, fast-start H.264 MP4. The page makes publication test writes under a fresh `proof/runs/<uuid>/` prefix on each run.
+
+## Run the checks
+
+1. While signed out, try reading the JPEG and record the denial.
+2. Sign in for writing. Verify the JPEG decodes. Run the publication check. Expect snapshots and head creation and update to return HTTP 200, a stale update to return 412, and the new head to remain readable.
+3. Sign in for reading. Verify the JPEG decodes and publication returns HTTP 403. Check that the page reports only the read-only storage scope.
+4. Open the video, start playback, then use **Seek to 75%**. Record the upstream 206 responses, byte ranges, player position, and bytes streamed by the worker before and after the seek. Confirm the browser plays from the target while the totals are below the object's full size. Repeat on desktop Safari and on an iPhone or iPad in Safari.
+5. After the token expires, sign in again and verify the video reopens at the previous position. **Drop local token** exercises the recovery interface on demand. Record an actual provider rejection or expiry separately.
+6. With an allowed Google OAuth test user who lacks project and bucket IAM, sign in and confirm the private image read returns HTTP 403.
+
+The dedicated video route is scoped to the requesting tab and its registered video. A second tab opening the same route receives a denial. The worker requests capped ranges when the player requests an open-ended range. It forwards the upstream partial response as a stream and reports the bytes that traverse the worker. Browser developer tools can provide independent network evidence.
+
+## Redeploy
+
+Run `firebase deploy --project minnelux --only hosting` from this directory with the Firebase CLI signed in as an authorized project administrator. Register the deployed origin on a Google OAuth Web application client. For a personal account, use an External audience with Testing status and add the intended test accounts. IAM for the private bucket is managed separately.
+
+The fixtures can be generated with FFmpeg.
+
+```sh
+ffmpeg -f lavfi -i testsrc=size=800x450:rate=1 -frames:v 1 photo.jpg
+ffmpeg -f lavfi -i testsrc2=size=720x404:rate=24 -t 96 -an \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart video.mp4
+```
+
+Upload them as `proof/fixtures/photo.jpg` and `proof/fixtures/video.mp4`. Use the appropriate content type and leave content encoding unset.
