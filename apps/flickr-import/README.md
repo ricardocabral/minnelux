@@ -17,7 +17,9 @@ Serve `apps/flickr-import/dist/` on a dedicated HTTPS origin. Apply the app's [s
 
 Enter a private bucket, the library prefix (default `library`), and your public OAuth web client ID. Sign in for import or read-only access. The app limits its Cloud Storage token to the chosen prefix. The editor token can replace only `head.json` and can create immutable objects. Google IAM still determines which permissions the account can receive. [GCS sign-in requirements](../../docs/prod/minnelux-prd.md#google-account-sign-in-and-gcs-access) · [Google Credential Access Boundaries](https://docs.cloud.google.com/iam/docs/downscoping-short-lived-credentials)
 
-Choose an existing Flickr source to add parts to it. For a first import, create a source and select one or more ZIPs. Preview before publishing. Saved media candidates and source records can be reopened from a fresh browser. Reselect the archive when bytes for a deferred member were never saved. Reopen published assets through the same connection to browse by tag, load a preview, or download an original.
+Choose an existing Flickr source to add parts to it. For a first import, create a source and select one or more ZIPs. Preview before publishing. Saved media candidates and source records can be reopened from a fresh browser. Reselect the archive when bytes for a deferred member were never saved. Reopen published assets through the same connection to browse by tag, load a preview, or download an original. Expand **Photo details** for Flickr comments, annotations, group memberships, license, source link, tag authors, and embedded JPEG data. Select an album to see its description, cover, and dates.
+
+To add these fields to an existing catalog, select the same source, preview, and publish. Reselect the original ZIPs to read the retained records and JPEG headers locally. A metadata-only update reuses existing originals and previews.
 
 ## Verify
 

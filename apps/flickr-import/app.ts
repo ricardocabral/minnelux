@@ -1,6 +1,8 @@
 import {
-  createFlickrRepository, createGcsStore, downscopeGcsToken, makePreview, prepareFlickrImport, scanZipFiles,
+  createFlickrRepository, createGcsStore, downscopeGcsToken, makePreview, prepareFlickrImport, readJpegMetadata, scanZipFiles,
 } from './importer.mjs'
+
+import { albumDetails, photoDetails } from './catalog-details.ts'
 
 const input = (id: string) => document.getElementById(id) as HTMLInputElement
 const button = (id: string) => document.getElementById(id) as HTMLButtonElement
@@ -167,6 +169,7 @@ const countLabels = {
   photoConflicts: 'Photo metadata conflicts',
   albumConflicts: 'Album document conflicts',
   previewErrors: 'Previews unavailable',
+  embeddedMetadataErrors: 'JPEG metadata unavailable',
 }
 
 function countCards(counts) {
@@ -307,6 +310,7 @@ async function prepare(context, withPreviews: boolean) {
     decisions,
     openObject: (ref, signal) => active.repository.openImportObject(base.baseToken, ref, signal),
     makePreview: withPreviews ? makePreview : undefined,
+    readEmbeddedJpeg: withPreviews ? readJpegMetadata : undefined,
     operationId: crypto.randomUUID(),
     signal: active.abort.signal,
     onProgress: withPreviews ? ({ phase, completed, total }) => {
@@ -423,14 +427,47 @@ button('reopen').onclick = () => withSession(async (active) => {
   for (const tag of base.tags) tagSelect.append(new Option(`${tag.title} · ${tag.source.kind}`, tag.id))
   filter.append(tagSelect)
   library.append(filter)
+  const albumPanel = document.createElement('div')
   const listing = document.createElement('div')
-  library.append(listing)
+  library.append(albumPanel, listing)
   node('reviews').append(library)
   const size = 20
   let page = 0
+  const tagTitles = new Map<string, string>(base.tags.map(tag => [tag.id, tag.title]))
+  const assetsByPhoto = new Map<string, typeof base.assets[number]>(base.assets.map(asset => [asset.source.photoId, asset]))
+  const fetchAsset = async (ref) => {
+    const bytes = await active.repository.openImportObject(base.baseToken, ref, active.abort.signal)
+    return new Response(bytes, { headers: { 'Content-Type': ref.mimeType } }).blob()
+  }
+  function loadThumbnail(ref, label: string, action: string) {
+    const control = document.createElement('button')
+    control.type = 'button'
+    control.className = 'secondary'
+    control.textContent = action
+    control.onclick = () => withSession(async () => {
+      const blob = await fetchAsset(ref)
+      if (session !== active || !control.isConnected) return
+      const image = document.createElement('img')
+      image.alt = label
+      const url = URL.createObjectURL(blob)
+      renderedUrls.add(url)
+      image.src = url
+      control.replaceWith(image)
+    })
+    return control
+  }
   function renderPage() {
     clearMediaUrls()
     listing.replaceChildren()
+    const chosen = base.tags.find(tag => tag.id === tagSelect.value)
+    albumPanel.replaceChildren()
+    if (chosen?.album) {
+      const cover = assetsByPhoto.get(chosen.album.coverPhoto?.photoId)
+      const coverRef = cover?.previews[0]
+      albumPanel.append(albumDetails(chosen.album, coverRef
+        ? loadThumbnail(coverRef, cover.metadata.title || cover.filename, 'Load album cover')
+        : undefined))
+    }
     const selected = tagSelect.value ? base.assets.filter((asset) => asset.tagIds.includes(tagSelect.value)) : base.assets
     const list = document.createElement('ul')
     list.className = 'assets'
@@ -439,26 +476,7 @@ button('reopen').onclick = () => withSession(async (active) => {
       const title = document.createElement('span')
       title.textContent = asset.metadata.title || asset.filename
       row.append(title)
-      const fetchAsset = async (ref) => {
-        const bytes = await active.repository.openImportObject(base.baseToken, ref, active.abort.signal)
-        return new Response(bytes, { headers: { 'Content-Type': ref.mimeType } }).blob()
-      }
-      if (asset.previews[0]) {
-        const thumb = document.createElement('button')
-        thumb.className = 'secondary'
-        thumb.textContent = 'Load preview'
-        thumb.onclick = () => withSession(async () => {
-          const blob = await fetchAsset(asset.previews[0])
-          if (session !== active || !row.isConnected) return
-          const image = document.createElement('img')
-          image.alt = title.textContent ?? ''
-          const url = URL.createObjectURL(blob)
-          renderedUrls.add(url)
-          image.src = url
-          thumb.replaceWith(image)
-        })
-        row.append(thumb)
-      }
+      if (asset.previews[0]) row.append(loadThumbnail(asset.previews[0], title.textContent, 'Load preview'))
       const download = document.createElement('button')
       download.className = 'secondary'
       download.textContent = 'Download original'
@@ -477,6 +495,8 @@ button('reopen').onclick = () => withSession(async (active) => {
         }, 10_000)
       })
       row.append(download)
+      const details = photoDetails(asset.metadata, tagTitles)
+      if (details) row.append(details)
       list.append(row)
     }
     listing.append(list)

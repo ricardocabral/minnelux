@@ -91,6 +91,8 @@ test("recognizes media by signature and reopens duplicate filenames by their cen
     { entryOrdinal: 0, filename: name, kind: "original", mimeType: "image/jpeg", sha256: digest(jpeg) },
     { entryOrdinal: 1, filename: name, kind: "original", mimeType: "video/mp4", sha256: digest(mp4) },
   ]);
+  assert.equal(members[0].jpegMetadata.orientation, 6);
+  assert.equal(members[1].jpegMetadata, undefined);
   assert.equal(members[1].byteLength, mp4.length);
   assert.deepEqual(await read(await members[0].openBytes()), jpeg);
   assert.deepEqual(await read(await members[1].openBytes()), mp4);

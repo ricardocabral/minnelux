@@ -60,6 +60,34 @@ type EditableField = 'title' | 'description' | 'capturedAt' | 'location'
 type Membership = { source?: 'provisional' | 'authoritative', owner: 'inherit' | 'add' | 'remove' }
 
 type FlickrTime = { wallTime: string, precision: 'second', offsetMinutes?: number, provenance: 'flickr' | 'exif' }
+type FlickrComment = { id?: string, body: string, author?: string, createdAt?: FlickrTime, sourceUrl?: string }
+type FlickrAnnotation = {
+  body: string
+  author?: string
+  createdAt?: FlickrTime
+  bounds?: { x: number, y: number, width: number, height: number }
+}
+type ExifMetadata = {
+  make?: string
+  model?: string
+  lensMake?: string
+  lensModel?: string
+  iso?: number
+  exposureSeconds?: number
+  fNumber?: number
+  flash?: number
+  focalLengthMm?: number
+  capturedAt?: FlickrTime
+  digitizedAt?: FlickrTime
+  modifiedAt?: FlickrTime
+}
+type IptcMetadata = {
+  caption?: string
+  dateCreated?: string
+  timeCreated?: string
+  digitalCreationDate?: string
+  digitalCreationTime?: string
+}
 type AssetMetadata = {
   title?: string
   description?: string
@@ -68,6 +96,13 @@ type AssetMetadata = {
   location?: { latitude: number, longitude: number }
   flickrRotation?: 0 | 90 | 180 | 270
   exifOrientation?: number
+  license?: string
+  sourceUrl?: string
+  comments?: FlickrComment[]
+  annotations?: FlickrAnnotation[]
+  groupMemberships?: { id: string, name?: string, sourceUrl?: string }[]
+  tagAttributions?: { tagId: string, author: string, createdAt?: FlickrTime }[]
+  embedded?: { exif?: ExifMetadata, iptc?: IptcMetadata }
 }
 type FlickrAsset<R> = {
   id: string
@@ -80,7 +115,18 @@ type FlickrAsset<R> = {
   metadata: AssetMetadata
   tagIds: string[]
 }
-type FlickrTag = { id: string, title: string, source: { sourceKey: string, kind: 'album' | 'keyword', value: string } }
+type AlbumMetadata = {
+  description?: string
+  coverPhoto?: { photoId?: string, sourceUrl?: string }
+  createdAt?: FlickrTime
+  updatedAt?: FlickrTime
+}
+type FlickrTag = {
+  id: string
+  title: string
+  source: { sourceKey: string, kind: 'album' | 'keyword', value: string }
+  album?: AlbumMetadata
+}
 type Receipt = { sourceKey: string, operationId: string, fingerprint: string, committedRevisionId: string }
 type FlickrImportBaseV1 = {
   version: 1
@@ -121,6 +167,16 @@ type PublishResult =
 - **Owner edits.** The owner-edit workflow writes updated catalog values and override flags together in the same library revision, even when the field's current value is already absent or the tag already removed. An absent field override is untouched. `set` preserves the value on the catalog record. `cleared` preserves the field's intentional absence. An absent membership choice defaults to `inherit`. Source membership may change as albums arrive while `add` and `remove` persist. A tag rename writes `ownerTagNames` keyed by the tag ID. Only the owner-edit workflow changes owner choices. The importer carries the existing choices forward. This state is returned on the next `readFlickrImport`.
 - **Upserts.** Each asset and tag ID occurs at most once per plan. Supply complete records for the affected IDs and the resulting state of the selected account. Omitted catalog records and other accounts' state are retained. The repository checks upsert identities, confirmed links, raw records, membership references, and stored object references against the source binding and pinned base. Media and raw objects must come from that base or a same-plan upload. Existing owner or other-source tags may be referenced on affected assets. Upserts may change only assets and imported tags owned by the plan's source. An import may publish state without any asset or tag upserts. A null plan source with empty upserts and uploads represents a no-op without creating an account binding.
 - **Object references.** `root` is a configured logical root, `key` is relative to it, and `observedVersion` is opaque. `byteLength` is a nonnegative integer and `sha256` is lowercase hex. Each `uploadId` is unique within a plan, and `openBytes` opens a new byte stream on every call. The repository verifies size and digest and replaces upload IDs with stored references before publishing. The repository verifies that originals, previews, and raw JSON references have their expected kinds. References carry no credentials or signed URLs.
+
+### Optional catalog details
+
+The additional photo and album fields are optional in version 1. Existing catalog snapshots open without migration. Photo comments and annotations carry plain text and preserve Flickr attribution. Annotation bounds retain the original coordinates and sizes. Tag attributions are scoped to the photo and reference the source keyword tag ID. An owner removing the active keyword membership preserves Flickr provenance.
+
+Album metadata belongs to the imported album tag. Retain a cover reference even when its media has yet to arrive. The client resolves a stored Flickr photo ID within the same source account and can use that asset’s preview. A source URL is an explicit navigation target.
+
+Embedded metadata belongs to the JPEG asset. The importer extracts it from original bytes, preserving EXIF wall times with a recorded offset when available. The primary catalog capture date retains its Flickr provenance. IPTC dates use `YYYY-MM-DD` and IPTC times use `HH:mm:ss` with an offset when available. An empty embedded record means the JPEG header was inspected. The schema keeps exposure seconds, focal length in millimeters, and the numeric EXIF flash field.
+
+Reconciliation can populate these fields for existing assets from retained raw JSON and JPEG headers. Reselecting the same ZIP parts supplies their verified bytes locally. An upgrade publishes ordinary catalog and tag upserts, preserving asset IDs, confirmed links, originals, and owner edits.
 
 ### Object placement and lifetime
 

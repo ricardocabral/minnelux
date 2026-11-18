@@ -1,3 +1,5 @@
+import { inspectJpeg, MAX_JPEG_HEADER_BYTES } from './jpeg.mjs'
+
 const maxPreviewSize = 360
 const maxImagePixels = 80_000_000
 const maxPreviewBytes = 48 * 1024 ** 2
@@ -13,7 +15,7 @@ export async function makePreview(original, metadata, signal) {
   }).blob()
   signal?.throwIfAborted()
   if (type.startsWith('image/')) {
-    const header = new DataView(await blob.slice(0, 512 * 1024).arrayBuffer())
+    const header = new DataView(await blob.slice(0, MAX_JPEG_HEADER_BYTES).arrayBuffer())
     const { orientation, width, height } = inspectImage(type, header)
     if (!width || !height || width * height > maxImagePixels) return undefined
     if (orientation) metadata.exifOrientation = orientation
@@ -117,51 +119,4 @@ function inspectImage(type, view) {
     }
   }
   return {}
-}
-
-function inspectJpeg(view) {
-  let offset = 2
-  const result = {}
-  while (offset + 4 <= view.byteLength && view.getUint8(offset) === 0xff) {
-    const kind = view.getUint8(offset + 1)
-    if (kind === 0xda || kind === 0xd9) break
-    if (kind === 0xff) {
-      offset++
-      continue
-    }
-    const length = view.getUint16(offset + 2)
-    const payload = offset + 4
-    const end = offset + 2 + length
-    if (length < 2 || end > view.byteLength) break
-    if (kind === 0xe1 && end - payload >= 14 && view.getUint32(payload) === 0x45786966 &&
-        view.getUint16(payload + 4) === 0) {
-      result.orientation ??= readOrientation(view, payload + 6, end)
-    }
-    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(kind) &&
-        end - payload >= 5) {
-      result.height = view.getUint16(payload + 1)
-      result.width = view.getUint16(payload + 3)
-    }
-    offset = end
-  }
-  return result
-}
-
-function readOrientation(view, start, end) {
-  const byteOrder = view.getUint16(start)
-  if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) return undefined
-  const little = byteOrder === 0x4949
-  if (view.getUint16(start + 2, little) !== 42) return undefined
-  const directory = start + view.getUint32(start + 4, little)
-  if (directory < start + 8 || directory + 2 > end) return undefined
-  const count = view.getUint16(directory, little)
-  for (let index = 0; index < count; index++) {
-    const at = directory + 2 + index * 12
-    if (at + 12 > end) return undefined
-    if (view.getUint16(at, little) === 274 &&
-        view.getUint16(at + 2, little) === 3 && view.getUint32(at + 4, little) === 1) {
-      const orientation = view.getUint16(at + 8, little)
-      return orientation >= 1 && orientation <= 8 ? orientation : undefined
-    }
-  }
 }

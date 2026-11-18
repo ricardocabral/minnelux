@@ -1,4 +1,4 @@
-import { Parser } from "htmlparser2";
+import { albumMetadata, metadataFor, tagAttribution } from "./catalog-metadata.mjs";
 
 const digits = value => typeof value === "string" && /^\d+$/.test(value);
 const usableId = value => digits(value) && value !== "0";
@@ -21,60 +21,6 @@ function equal(a, b) {
   if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
   const keys = Object.keys(a);
   return keys.length === Object.keys(b).length && keys.every(k => Object.hasOwn(b, k) && equal(a[k], b[k]));
-}
-
-// Parse text only. Parser callbacks never create DOM elements or load embedded resources.
-const blockTags = new Set(["address", "article", "blockquote", "br", "div", "h1", "h2", "h3", "h4", "h5",
-  "h6", "hr", "li", "p", "pre", "section", "td", "th", "tr"]);
-const hiddenTags = new Set(["script", "style", "template"]);
-function plainText(source) {
-  const text = [];
-  let hidden = 0;
-  new Parser({
-    onopentag(name) {
-      if (hiddenTags.has(name)) hidden++;
-      if (!hidden && blockTags.has(name)) text.push(" ");
-    },
-    ontext(value) {
-      if (!hidden) text.push(value);
-    },
-    onclosetag(name) {
-      if (hiddenTags.has(name)) hidden--;
-      if (!hidden && blockTags.has(name)) text.push(" ");
-    },
-  }).end(source);
-  return text.join("").replace(/\s+/g, " ").trim();
-}
-
-function flickrTime(value) {
-  if (typeof value !== "string") return;
-  const match = /^(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)(Z|([+-])(\d\d):?(\d\d))?$/.exec(value);
-  if (!match) return;
-  const wallTime = match[1] + "T" + match[2];
-  const date = new Date(wallTime + "Z");
-  if (!Number.isFinite(+date) || date.toISOString().slice(0, 19) !== wallTime) return;
-  const result = { wallTime, precision: "second", provenance: "flickr" };
-  if (match[3]) {
-    if (Number(match[6]) > 59 || Number(match[5]) * 60 + Number(match[6]) > 14 * 60) return;
-    result.offsetMinutes = match[3] === "Z" ? 0 : (match[4] === "-" ? -1 : 1) * (+match[5] * 60 + +match[6]);
-  }
-  return result;
-}
-function metadataFor(photo) {
-  const result = {};
-  if (typeof photo?.name === "string") result.title = photo.name;
-  if (typeof photo?.description === "string") result.description = plainText(photo.description);
-  const captured = flickrTime(photo?.date_taken), imported = flickrTime(photo?.date_imported);
-  if (captured) result.capturedAt = captured;
-  if (imported) result.flickrImportedAt = imported;
-  const geo = list(photo?.geo);
-  const integer = x => typeof x === "string" && /^-?\d+$/.test(x);
-  if (geo.length === 1 && integer(geo[0]?.latitude) && integer(geo[0]?.longitude)) {
-    const latitude = Number(geo[0].latitude) / 1e6, longitude = Number(geo[0].longitude) / 1e6;
-    if (Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) result.location = { latitude, longitude };
-  }
-  if ([0, 90, 180, 270, "0", "90", "180", "270"].includes(photo?.rotation)) result.flickrRotation = Number(photo.rotation);
-  return result;
 }
 
 function sourceBinding(base, requested, parts) {
@@ -225,7 +171,7 @@ async function selectRecords(records, kind, decisions, conflicts, rawJson) {
 
 async function applyMemberships(source, photos, albums, baseTags, preview) {
   const previousTags = new Map(baseTags.map(t => [JSON.stringify([t.source?.kind, t.source?.value]), t]));
-  const tags = new Map(), desired = new Map();
+  const tags = new Map(), desired = new Map(), attributions = new Map();
   const sourceKey = source.binding.sourceKey;
   async function tag(kind, value, title) {
     const key = JSON.stringify([kind, value]);
@@ -242,6 +188,8 @@ async function applyMemberships(source, photos, albums, baseTags, preview) {
   const albumEdges = new Map();
   for (const [id, album] of albums) {
     const tagId = await tag("album", id, album.title);
+    const details = albumMetadata(album);
+    if (Object.keys(details).length) tags.get(JSON.stringify(["album", id])).album = details;
     for (const photoId of new Set(album.photos)) {
       if (!usableId(photoId)) continue;
       if (!albumEdges.has(photoId)) albumEdges.set(photoId, new Set());
@@ -267,11 +215,16 @@ async function applyMemberships(source, photos, albums, baseTags, preview) {
     if (Array.isArray(photo.albums)) for (const id of authoritative ?? []) {
       if (!listed.has(id)) preview.albumDisagreements.push({ photoId, albumId: id });
     }
+    const attributed = [];
     for (const item of list(photo.tags)) {
       if (typeof item?.tag === "string" && item.tag.trim()) {
-        attach(photoId, await tag("keyword", item.tag, item.tag), "authoritative");
+        const tagId = await tag("keyword", item.tag, item.tag);
+        attach(photoId, tagId, "authoritative");
+        const entry = tagAttribution(tagId, item);
+        if (entry) attributed.push(entry);
       }
     }
+    if (attributed.length) attributions.set(photoId, attributed);
   }
   for (const photoId of new Set([...Object.keys(source.memberships), ...desired.keys()])) {
     const before = source.memberships[photoId] ?? {}, after = {};
@@ -282,7 +235,7 @@ async function applyMemberships(source, photos, albums, baseTags, preview) {
     if (Object.keys(after).length) source.memberships[photoId] = after;
     else delete source.memberships[photoId];
   }
-  return { tags: [...tags.values()], albumEdges };
+  return { tags: [...tags.values()], albumEdges, attributions };
 }
 
 function groupMedia(source, decisions, descriptor, preview) {
@@ -339,7 +292,7 @@ function activeTags(old, prior, current) {
 // Builds a local preview and a complete candidate plan against a pinned repository base.
 // Publication and retries use the returned plan, including its original operation ID.
 export async function prepareFlickrImport(base, parts, {
-  binding, openObject, makePreview, operationId = crypto.randomUUID(), decisions = {}, signal, onProgress,
+  binding, openObject, makePreview, readEmbeddedJpeg, operationId = crypto.randomUUID(), decisions = {}, signal, onProgress,
 } = {}) {
   signal?.throwIfAborted();
   const account = sourceBinding(base, binding, parts);
@@ -348,7 +301,7 @@ export async function prepareFlickrImport(base, parts, {
   source.binding = account;
   const preview = { matched: [], metadataOnly: [], mediaOnly: [], albumReferenceOnly: [], ambiguous: [], duplicates: [],
     invalidMetadata: [], unsupportedMedia: [], albumDisagreements: [], unresolvedAlbums: [], photoConflicts: [],
-    albumConflicts: [], previewErrors: [] };
+    albumConflicts: [], previewErrors: [], embeddedMetadataErrors: [] };
   const local = new Map(), uploads = new Map(), opened = new Map();
   collect(parts, source, decisions, uploads, local, preview);
   async function readSource(member, raw) {
@@ -368,7 +321,7 @@ export async function prepareFlickrImport(base, parts, {
   }
   const photos = await selectRecords(source.photos, "photo", decisions.photos, preview.photoConflicts, rawJson);
   const albums = await selectRecords(source.albums, "album", decisions.albums, preview.albumConflicts, rawJson);
-  const { tags, albumEdges } = await applyMemberships(source, photos, albums, base.tags, preview);
+  const { tags, albumEdges, attributions } = await applyMemberships(source, photos, albums, base.tags, preview);
   const descriptor = ref => ref.uploadId ? uploads.get(ref.uploadId) : ref;
   const { groups, linked } = groupMedia(source, decisions, descriptor, preview);
   const existing = new Map(base.assets.map(a => [a.source.photoId, a]));
@@ -385,8 +338,28 @@ export async function prepareFlickrImport(base, parts, {
       const localEntry = local.get(memberKey(candidate.member));
       const sameOriginal = old && sameMember(base.source?.links[id]?.member, candidate.member);
       const metadata = metadataFor(photo);
-      const exif = localEntry?.exifOrientation ?? (sameOriginal ? old.metadata.exifOrientation : undefined);
-      if (Number.isInteger(exif) && exif >= 1 && exif <= 8) metadata.exifOrientation = exif;
+      const tagAttributions = attributions.get(id);
+      if (tagAttributions) metadata.tagAttributions = tagAttributions;
+      const originalInput = { filename: candidate.filename, mimeType: info.mimeType, byteLength: info.byteLength,
+        sha256: info.sha256, openBytes: async s => localEntry?.openBytes ? localEntry.openBytes(s) : openObject(candidate.original, s) };
+      let jpeg = localEntry?.jpegMetadata;
+      if (info.mimeType === "image/jpeg" && !jpeg && !old?.metadata.embedded && readEmbeddedJpeg) {
+        try {
+          jpeg = await readEmbeddedJpeg(originalInput, signal);
+          signal?.throwIfAborted();
+        } catch (error) {
+          signal?.throwIfAborted();
+          if (error.name === "AbortError") throw error;
+          preview.embeddedMetadataErrors.push({ photoId: id, member: candidate.member, reason: "jpeg-metadata-unavailable" });
+        }
+      }
+      if (jpeg) {
+        metadata.embedded = { ...(jpeg.exif && { exif: jpeg.exif }), ...(jpeg.iptc && { iptc: jpeg.iptc }) };
+      } else if (sameOriginal && old.metadata.embedded) {
+        metadata.embedded = old.metadata.embedded;
+      }
+      const orientation = jpeg?.orientation ?? localEntry?.exifOrientation ?? (sameOriginal ? old.metadata.exifOrientation : undefined);
+      if (Number.isInteger(orientation) && orientation >= 1 && orientation <= 8) metadata.exifOrientation = orientation;
       for (const field of editableFields) {
         const override = source.ownerFields[id]?.[field];
         if (override === "set" && old && Object.hasOwn(old.metadata, field)) metadata[field] = old.metadata[field];
@@ -403,8 +376,7 @@ export async function prepareFlickrImport(base, parts, {
       if (transformChanged) item.previews = [];
       if (makePreview && !item.previews.length) {
         try {
-          const blob = await makePreview({ filename: candidate.filename, mimeType: info.mimeType, byteLength: info.byteLength,
-            sha256: info.sha256, openBytes: async s => localEntry?.openBytes ? localEntry.openBytes(s) : openObject(candidate.original, s) }, metadata, signal);
+          const blob = await makePreview(originalInput, metadata, signal);
           signal?.throwIfAborted();
           if (blob) {
             if (!["image/jpeg", "image/png", "image/webp"].includes(blob.type)) throw Error("Unsupported preview type");

@@ -1,6 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { BlobReader, ZipReader } from "@zip.js/zip.js";
+import { inspectJpeg, MAX_JPEG_HEADER_BYTES } from "./jpeg.mjs";
 
 const MiB = 1024 * 1024;
 const GiB = 1024 * MiB;
@@ -181,7 +182,7 @@ async function openEntry(entry, signal) {
 
 async function inspectEntry(entry, member, metadata, signal) {
   const byteLength = entry.uncompressedSize;
-  const bytes = new Uint8Array(metadata ? byteLength : Math.min(SIGNATURE_BYTES, byteLength));
+  const bytes = new Uint8Array(metadata ? byteLength : Math.min(MAX_JPEG_HEADER_BYTES, byteLength));
   const hash = sha256.create();
   let written = 0;
   await entry.getData(new WritableStream({
@@ -197,7 +198,7 @@ async function inspectEntry(entry, member, metadata, signal) {
 
   let mimeType = "application/json";
   if (!metadata) {
-    mimeType = mediaType(bytes);
+    mimeType = mediaType(bytes.subarray(0, SIGNATURE_BYTES));
     if (!mimeType) {
       if (mediaFilename.test(member.filename)) throw zipError("unsupported-media");
       return { ...member, kind: "ignored" };
@@ -211,6 +212,7 @@ async function inspectEntry(entry, member, metadata, signal) {
     openBytes: readSignal => openEntry(entry, readSignal),
   };
   if (metadata) descriptor.json = parseMetadata(member, bytes);
+  else if (mimeType === "image/jpeg") descriptor.jpegMetadata = inspectJpeg(new DataView(bytes.buffer));
   return descriptor;
 }
 

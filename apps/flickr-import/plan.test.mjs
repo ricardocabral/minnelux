@@ -270,3 +270,67 @@ test("a saved original retries preview generation on a capable client without re
   assert.deepEqual(retry.plan.assets[0].original, saved.base.assets[0].original);
   assert.equal(retry.plan.assets[0].previews.length,1);
 });
+
+test('projects Flickr photo details and album metadata without changing photo or tag identity', async () => {
+  const basePhoto = { photopage: 'https://www.flickr.com/photos/member/42/', license: 'CC BY 2.0',
+    comments: [{ id: '7', comment: '<p>Here &amp; there</p><script>bad()</script>', user: '3@N01',
+      date: '2023-06-18 09:01:02', url: 'https://www.flickr.com/photos/member/42/#comment7' }],
+    notes: [{ text: '<b>Bridge</b>', user: 'https://www.flickr.com/photos/author/',
+      date: '2023-06-19 11:00:00', x: '0', y: '4', width: '9', height: '10' }],
+    groups: [{ id: '12@N00', name: 'Architecture', url: 'https://www.flickr.com/groups/architecture/' }],
+    tags: [{ tag: 'Bridge', user: 'https://www.flickr.com/photos/person1/', date_create: '2023-06-20 12:00:00' },
+      { tag: 'Bridge', user: 'https://www.flickr.com/photos/person2/' }] };
+  const input = part('flickr-details', original('42'), sidecar('42', basePhoto),
+    albums({ id: '12', title: 'Travel', description: '<p>Across &amp; around</p>',
+      cover_photo: 'https://www.flickr.com/photos/member/49/', created: '1686902400',
+      last_updated: '1686988800', photos: ['42'] }));
+  const {plan} = await prepare([input]);
+  const item = plan.assets[0], album = plan.tags.find(t => t.source.kind === 'album');
+  assert.equal(item.id, catalogId('asset', '42'));
+  assert.equal(item.metadata.sourceUrl, basePhoto.photopage);
+  assert.equal(item.metadata.license, 'CC BY 2.0');
+  assert.deepEqual(item.metadata.comments, [{ id: '7', body: 'Here & there', author: '3@N01',
+    createdAt: {wallTime:'2023-06-18T09:01:02', precision:'second', provenance:'flickr'}, sourceUrl: basePhoto.comments[0].url }]);
+  assert.deepEqual(item.metadata.annotations, [{ body: 'Bridge', author: basePhoto.notes[0].user,
+    createdAt: {wallTime:'2023-06-19T11:00:00', precision:'second', provenance:'flickr'},
+    bounds:{x:0,y:4,width:9,height:10} }]);
+  assert.deepEqual(item.metadata.groupMemberships, [{id:'12@N00',name:'Architecture',sourceUrl:basePhoto.groups[0].url}]);
+  assert.deepEqual(item.metadata.tagAttributions, [
+    {tagId:catalogId('keyword','Bridge'), author:basePhoto.tags[0].user,
+      createdAt:{wallTime:'2023-06-20T12:00:00',precision:'second',provenance:'flickr'}},
+    {tagId:catalogId('keyword','Bridge'), author:basePhoto.tags[1].user},
+  ]);
+  assert.equal(album.id, catalogId('album','12'));
+  assert.deepEqual(album.album, {
+    description:'Across & around',
+    coverPhoto:{photoId:'49',sourceUrl:'https://www.flickr.com/photos/member/49/'},
+    createdAt:{wallTime:'2023-06-16T08:00:00',precision:'second',provenance:'flickr',offsetMinutes:0},
+    updatedAt:{wallTime:'2023-06-17T08:00:00',precision:'second',provenance:'flickr',offsetMinutes:0},
+  });
+});
+
+test('backfills an already published JPEG through a metadata-only plan and replays without extra reads', async () => {
+  const input = part('old', original('42'), sidecar('42', {date_taken:'2020-03-02 12:00:00'}));
+  const first = await prepare([input]);
+  const saved = await reopen(first.plan);
+  let reads = 0;
+  const readEmbeddedJpeg = async (source) => {
+    assert.equal((await new Response(await source.openBytes()).blob()).size, photo.length);
+    reads++;
+    return { orientation: saved.base.assets[0].metadata.exifOrientation,
+      exif: { make: 'Fixture', iso: 100, capturedAt: {wallTime:'2019-04-03T11:22:33',precision:'second',provenance:'exif'} },
+      iptc: { caption:'Fixture caption' } };
+  };
+  const backfill = await prepare([], {openObject:saved.openObject,readEmbeddedJpeg}, saved.base);
+  assert.equal(reads, 1);
+  assert.deepEqual(backfill.plan.uploads, []);
+  assert.equal(backfill.plan.assets[0].id, saved.base.assets[0].id);
+  assert.deepEqual(backfill.plan.assets[0].original, saved.base.assets[0].original);
+  assert.equal(backfill.plan.assets[0].metadata.capturedAt.provenance,'flickr');
+  assert.equal(backfill.plan.assets[0].metadata.embedded.exif.capturedAt.provenance,'exif');
+  assert.equal(backfill.plan.assets[0].metadata.embedded.iptc.caption,'Fixture caption');
+  const updated = await reopen(backfill.plan, saved.base, saved.objects);
+  const replay = await prepare([], {openObject:updated.openObject,readEmbeddedJpeg}, updated.base);
+  assert.equal(reads, 1);
+  assert.equal(replay.plan.source, null);
+});

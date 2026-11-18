@@ -39,3 +39,13 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 3px s
 .assets li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .65rem 0; }
 .assets li span { flex: 1 1 13rem; }
 .assets img { width: 6rem; height: 5rem; object-fit: contain; }
+
+.catalog-details { flex-basis: 100%; padding: .5rem .7rem; overflow-wrap: anywhere; }
+.catalog-details summary { cursor: pointer; }
+.catalog-details dl { display: grid; grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr); gap: .4rem .85rem; margin: .55rem 0; }
+.catalog-details dt { font-weight: 650; }
+.catalog-details dd { margin: 0; }
+.catalog-details h4 { margin: .75rem 0 .25rem; }
+.assets .catalog-details li { display: list-item; margin: .25rem 0; }
+.catalog-details small { display: block; }
+.catalog-details img { display: block; max-width: min(100%, 13rem); height: auto; }

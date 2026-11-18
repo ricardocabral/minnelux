@@ -2,6 +2,7 @@ export { createGcsStore, downscopeGcsToken } from './gcs.mjs'
 export { prepareFlickrImport } from './plan.mjs'
 export { createFlickrRepository } from './repository.mjs'
 export { makePreview } from './preview.mjs'
+export { readJpegMetadata } from './jpeg.mjs'
 
 // The worker keeps ZIP handles for the current selection. It receives archive bytes
 // and never receives a storage credential.

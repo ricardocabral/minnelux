@@ -1,5 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { sourceUrl } from './catalog-metadata.mjs';
 
 // All keys passed to the adapter include the configured prefix. Every reference on disk is relative.
 const HASH = /^[a-f0-9]{64}$/;
@@ -211,19 +212,69 @@ function validateSource(source, key) {
   for (const [m,c] of candidates) if (c.review === 'confirmed') check(confirmedMembers.has(m));
   return candidates;
 }
-function validateMetadata(m) {
-  check(dict(m) && ['title','description'].every(k => m[k] === undefined || typeof m[k] === 'string'));
+const optional = (value, valid) => value === undefined || valid(value);
+const text = value => typeof value === 'string';
+const safeUrl = value => typeof value === 'string' && sourceUrl(value) === value;
+const positive = value => Number.isFinite(value) && value > 0;
+const dateOnly = /^\d{4}-\d\d-\d\d$/;
+const wallClock = /^\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d)?$/;
+
+function timestamp(date, provenance) {
+  return dict(date) && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/.test(date.wallTime) &&
+    date.precision === 'second' && (provenance ? date.provenance === provenance : ['flickr','exif'].includes(date.provenance)) &&
+    optional(date.offsetMinutes,offset => Number.isInteger(offset) && Math.abs(offset) <= 14 * 60);
+}
+
+function validateAlbumMetadata(album) {
+  check(dict(album) && optional(album.description, text) &&
+    optional(album.createdAt, date => timestamp(date, 'flickr')) &&
+    optional(album.updatedAt, date => timestamp(date, 'flickr')));
+  if (album.coverPhoto !== undefined) {
+    const cover = album.coverPhoto;
+    check(dict(cover) && (cover.photoId !== undefined || cover.sourceUrl !== undefined) &&
+      optional(cover.photoId, id => isId(id) && id !== '0') && optional(cover.sourceUrl, safeUrl));
+  }
+}
+
+function validateEmbedded(embedded) {
+  check(dict(embedded));
+  const {exif, iptc} = embedded;
+  if (exif !== undefined) {
+    check(dict(exif) && ['make','model','lensMake','lensModel'].every(field => optional(exif[field], nonempty)) &&
+      ['exposureSeconds','fNumber','focalLengthMm'].every(field => optional(exif[field], positive)) &&
+      optional(exif.iso, iso => Number.isSafeInteger(iso) && iso > 0) &&
+      optional(exif.flash, flash => safeSize(flash) && flash <= 0xffff) &&
+      ['capturedAt','digitizedAt','modifiedAt'].every(field => optional(exif[field], date => timestamp(date, 'exif'))));
+  }
+  if (iptc !== undefined) {
+    check(dict(iptc) && optional(iptc.caption, text) &&
+      ['dateCreated','digitalCreationDate'].every(field => optional(iptc[field], value => text(value) && dateOnly.test(value))) &&
+      ['timeCreated','digitalCreationTime'].every(field => optional(iptc[field], value => text(value) && wallClock.test(value))));
+  }
+}
+
+function validateMetadata(m, tags, sourceKey, mimeType) {
+  check(dict(m) && ['title','description','license'].every(k => optional(m[k],text)) && optional(m.sourceUrl,safeUrl));
   if (m.location !== undefined) {
     check(dict(m.location) && Number.isFinite(m.location.latitude) && Math.abs(m.location.latitude) <= 90 &&
       Number.isFinite(m.location.longitude) && Math.abs(m.location.longitude) <= 180);
   }
   if (m.flickrRotation !== undefined) check([0,90,180,270].includes(m.flickrRotation));
   if (m.exifOrientation !== undefined) check(Number.isInteger(m.exifOrientation) && m.exifOrientation >= 1 && m.exifOrientation <= 8);
-  for (const date of [m.capturedAt,m.flickrImportedAt]) {
-    if (date === undefined) continue;
-    check(dict(date) && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/.test(date.wallTime) && date.precision === 'second' &&
-      ['flickr','exif'].includes(date.provenance) && (date.offsetMinutes === undefined ||
-      (Number.isInteger(date.offsetMinutes) && Math.abs(date.offsetMinutes) <= 14 * 60)));
+  check([m.capturedAt,m.flickrImportedAt].every(date => optional(date,timestamp)));
+  const rows = (field, valid) => check(optional(m[field], list => Array.isArray(list) && list.every(row => dict(row) && valid(row))));
+  const hasAuthorAndDate = row => optional(row.author,nonempty) && optional(row.createdAt,date => timestamp(date,'flickr'));
+  rows('comments', row => text(row.body) && hasAuthorAndDate(row) && optional(row.id,nonempty) && optional(row.sourceUrl,safeUrl));
+  rows('annotations', row => text(row.body) && hasAuthorAndDate(row) &&
+    optional(row.bounds,bounds => dict(bounds) && ['x','y','width','height'].every(field => safeSize(bounds[field]))));
+  rows('groupMemberships', row => nonempty(row.id) && optional(row.name,nonempty) && optional(row.sourceUrl,safeUrl));
+  rows('tagAttributions', row => {
+    const tag = tags.get(row.tagId);
+    return tag?.source?.kind === 'keyword' && tag.source.sourceKey === sourceKey && nonempty(row.author) && hasAuthorAndDate(row);
+  });
+  if (m.embedded !== undefined) {
+    check(mimeType === 'image/jpeg');
+    validateEmbedded(m.embedded);
   }
 }
 function indexed(records) {
@@ -253,6 +304,10 @@ async function mergeCatalog(source, updatedAssets, updatedTags, catalog, previou
   await mapBounded(updatedTags,async tag => {
     check(nonempty(tag.title) && dict(tag.source) && ['album','keyword'].includes(tag.source.kind));
     check(tag.source.kind === 'album' ? isId(tag.source.value) : nonempty(tag.source.value));
+    if (tag.album !== undefined) {
+      check(tag.source.kind === 'album');
+      validateAlbumMetadata(tag.album);
+    }
     if (previous?.ownerTagNames[tag.id]) check(tags.get(tag.id)?.title === tag.title);
     await identity(tag,tag.source.kind,tag.source.value,tags);
   });
@@ -262,7 +317,7 @@ async function mergeCatalog(source, updatedAssets, updatedTags, catalog, previou
       new Set(asset.tagIds).size === asset.tagIds.length && asset.tagIds.every(id => tags.has(id)));
     check(typeof asset.addedAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(asset.addedAt) &&
       Number.isFinite(Date.parse(asset.addedAt)));
-    validateMetadata(asset.metadata);
+    validateMetadata(asset.metadata, tags, key, asset.original.mimeType);
     const old = assets.get(asset.id);
     if (old) {
       check(asset.addedAt === old.addedAt && same(asset.original,old.original));

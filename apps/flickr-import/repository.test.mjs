@@ -286,3 +286,51 @@ test('an interrupted head write never starts an unabortable read after disconnec
   const recovered = await repo.publishFlickrImport(p,{mode:'recover'});
   assert.equal(recovered.status,'published');
 });
+
+test('rejects unusable extended metadata without advancing the head', async () => {
+  const store = memoryStore();
+  const repo = createFlickrRepository(store);
+  const base = await repo.readFlickrImport(sourceKey);
+  const cases = [
+    p => { p.assets[0].metadata.sourceUrl = 'javascript:alert(1)'; },
+    p => { p.assets[0].metadata.annotations = [{body:'bad', bounds:{x:0,y:1,width:-1,height:3}}]; },
+    p => { p.assets[0].metadata.tagAttributions = [{tagId, author:'fixture'}]; },
+    p => { p.assets[0].metadata.embedded = {exif:{flash:'not a bitfield'}}; },
+    p => { p.tags[0].album = {coverPhoto:{sourceUrl:'https://person:pass@example.com/photo'}}; },
+  ];
+  for (const change of cases) {
+    const input = completePlan(base);
+    change(input);
+    assert.deepEqual(await repo.publishFlickrImport(input), {status:'failed',code:'invalidPlan'});
+    assert.equal(store.objects.has('library/head.json'), false);
+  }
+});
+
+test('published v1 catalogs reopen with additional optional photo and album fields', async () => {
+  const store = memoryStore();
+  const repo = createFlickrRepository(store);
+  const old = await repo.readFlickrImport(sourceKey);
+  assert.equal((await repo.publishFlickrImport(completePlan(old))).status, 'published');
+  const base = await repo.readFlickrImport(sourceKey);
+  const originalWrites = [...store.objects.keys()].filter(key => key.includes('/originals/'));
+  const update = plan(base);
+  const keywordId = catalogId('keyword','Architecture');
+  const { metadata } = base.assets[0];
+  update.assets = [{...base.assets[0], metadata: {...metadata, license: 'All Rights Reserved',
+    sourceUrl: 'https://www.flickr.com/photos/account/42/',
+    comments: [{body:'Fixture',author:'sample@N04'}],
+    annotations: [{body:'Bridge',bounds:{x:0,y:1,width:2,height:3}}],
+    groupMemberships: [{id:'7@N05',name:'Travel'}],
+    tagAttributions: [{tagId:keywordId,author:'sample@N04'}],
+    embedded: {exif:{iso:100,exposureSeconds:0.01,flash:0},iptc:{caption:'Fixture'}} }}];
+  update.tags = [
+    {id:keywordId,title:'Architecture',source:{sourceKey,kind:'keyword',value:'Architecture'}},
+    {...base.tags[0],album:{description:'Travel',coverPhoto:{photoId:'98'},createdAt:{wallTime:'2024-12-01T12:00:00',
+      precision:'second',provenance:'flickr',offsetMinutes:0}}},
+  ];
+  assert.equal((await repo.publishFlickrImport(update)).status, 'published');
+  const reopened = await createFlickrRepository(store).readFlickrImport(sourceKey);
+  assert.deepEqual(reopened.assets, update.assets);
+  assert.deepEqual(reopened.tags.find(tag=>tag.id===tagId).album, update.tags[1].album);
+  assert.deepEqual([...store.objects.keys()].filter(key=>key.includes('/originals/')), originalWrites);
+});

@@ -53,6 +53,14 @@ Key an album tag by source account and album ID. Key keyword tags in a separate 
 | `geo` | In the verified profile, the populated array holds one object with integer-string `latitude`, `longitude`, and `accuracy`. Divide signed coordinate values by 1,000,000. Validate latitude in `[-90, 90]` and longitude in `[-180, 180]`. Preserve full source precision, valid zero coordinates, and raw accuracy. Keep unknown shapes or invalid values in source JSON. |
 | `rotation` and EXIF Orientation | Preserve both source values. Apply the orientation policy consistently in thumbnails, posters where applicable, and the viewer. Account for any orientation the browser decoder already applied. Verify equivalent EXIF and Flickr transforms produce one correction and cover cases where Flickr rotation supplies the only correction. |
 
+### Photo and album details
+
+- Map embedded photo comments from `comments[]` and image annotations from `notes[]`. Keep author, timestamp, and available source link. Preserve annotation bounds as Flickr coordinates. Display comment and annotation bodies as text.
+- Map `groups[]` as photo group memberships and keep the Flickr license label and photo-page URL. Keep keyword authors and creation times on the photo by keyword tag ID.
+- Store album descriptions, creation and update times, and cover references on album tags. Flickr album timestamps are Unix seconds and carry a UTC offset of zero in the catalog. Retain the Flickr cover photo ID or page URL if its image has yet to arrive.
+- Extract JPEG EXIF make and model, lens fields when present, ISO, exposure duration, f-number, flash, focal length, and original, digitized, and modified times. Retain supported IPTC caption and creation fields. The scanner inspects a bounded header while verifying the original. A publish preview can also inspect an already stored original when its catalog record lacks embedded metadata.
+- Display these fields in photo details and the selected album’s detail panel. Keep the original JPEG and raw Flickr JSON for full source fidelity.
+
 ## Browser and storage architecture
 
 The versioned [importer and library repository contract](REPOSITORY-CONTRACT.md) defines the shared operations, durable records, and publication outcomes used by both implementations.
