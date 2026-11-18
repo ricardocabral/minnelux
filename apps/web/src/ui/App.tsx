@@ -15,17 +15,22 @@ type AppProps = {
   client?: LibraryClient
   isFixture?: boolean
   connectionNotice?: string
+  checkingConnection?: boolean
+  durable?: boolean
+  onRetrySignOut?: () => void
   onConnect?: (configuration: ConnectConfiguration) => Promise<void>
   onOpenFixture?: () => void
   onDisconnect?: () => void
 }
 
-export default function AppView({ client, isFixture, connectionNotice, onConnect, onOpenFixture, onDisconnect }: AppProps) {
+export default function AppView({ client, isFixture, connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onOpenFixture, onDisconnect }: AppProps) {
   return client ? <ConnectedLibrary client={client} isFixture={isFixture} onDisconnect={onDisconnect} />
-    : <Connect connectionNotice={connectionNotice} onConnect={onConnect} onOpenFixture={onOpenFixture} />
+    : <Connect connectionNotice={connectionNotice} checkingConnection={checkingConnection} durable={durable}
+      onRetrySignOut={onRetrySignOut} onConnect={onConnect} onOpenFixture={onOpenFixture} />
 }
 
-function Connect({ connectionNotice, onConnect, onOpenFixture }: Pick<AppProps, 'connectionNotice' | 'onConnect' | 'onOpenFixture'>) {
+function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onOpenFixture }:
+  Pick<AppProps, 'connectionNotice' | 'checkingConnection' | 'durable' | 'onRetrySignOut' | 'onConnect' | 'onOpenFixture'>) {
   const { pathname } = useLocation()
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; role: 'status' | 'alert' }>()
@@ -63,12 +68,14 @@ function Connect({ connectionNotice, onConnect, onOpenFixture }: Pick<AppProps, 
     <main className="connect-main">
       <h1>Open your library</h1>
       {connectionNotice ? <p role="status">{connectionNotice}</p> : null}
-      {onConnect ? <>
+      {checkingConnection ? (!connectionNotice ? <p role="status">Checking for a saved connection…</p> : null)
+      : onRetrySignOut ? <button type="button" className="control primary" onClick={onRetrySignOut}>Retry sign-out</button>
+      : onConnect ? <>
         <p>Connect to the Google Cloud Storage bucket that holds your Minnelux library.</p>
         <form className="connect-form" onSubmit={event => void connect(event)} aria-busy={pending}>
           <label>Bucket name <input name="bucket" required autoComplete="off" disabled={pending} /></label>
           <label>Library prefix <input name="prefix" autoComplete="off" disabled={pending} /></label>
-          <label>Google OAuth client ID <input name="clientId" required autoComplete="off" disabled={pending} /></label>
+          {!durable ? <label>Google OAuth client ID <input name="clientId" required autoComplete="off" disabled={pending} /></label> : null}
           <label>Access
             <select name="access" disabled={pending}>
               <option value="read">Read only</option>
@@ -80,7 +87,7 @@ function Connect({ connectionNotice, onConnect, onOpenFixture }: Pick<AppProps, 
           {feedback ? <p role={feedback.role} className={feedback.role === 'alert' ? 'form-error' : undefined}>{feedback.text}</p> : null}
         </form>
       </> : <p>A Google Cloud Storage connection is unavailable in this build.</p>}
-      {onOpenFixture ? <div className="connect-footer">
+      {onOpenFixture && !checkingConnection && !onRetrySignOut ? <div className="connect-footer">
         <button type="button" className={onConnect ? 'control' : 'control primary'} onClick={onOpenFixture} disabled={pending}>
           Open sample library
         </button>
