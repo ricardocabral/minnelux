@@ -1,0 +1,11 @@
+{
+  "operationId": "cafe-import",
+  "filename": "Cafe.jpg",
+  "addedAt": "2026-11-18T12:00:00.000Z",
+  "tagTitles": [
+    "Family",
+    "Québec"
+  ],
+  "originalSha256": "fe5729de2d789ddfc567836ba47a8af215342a5a4d869491b60a2f9d6d20a32f",
+  "assetId": "local:f9cc2840a5657d8c9e99f268896f31324b9862ab7c3f9813ab356a48981a3191"
+}
