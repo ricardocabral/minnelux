@@ -168,3 +168,26 @@ test('can stage a large verified response on disk and release it after the read'
   assert.deepEqual(await object.body.slice(-2).bytes(), new Uint8Array([42, 42]))
   await object.dispose()
 })
+
+test('rejects resume status beyond any attempted upload bytes', async () => {
+  const body = new Blob([new Uint8Array(17 * 1024 ** 2)])
+  for (const [status, message] of [
+    [new Response(null, { status: 308, headers: { range: 'bytes=0-9000000' } }), /invalid upload offset/],
+    [Response.json({ generation: '3' }), /before the final chunk/],
+  ]) {
+    let calls = 0
+    const store = createGcsStore('minnelux-test', () => 'synthetic', {
+      resumable: true,
+      fetch: async (url, request) => {
+        if (request.method === 'POST') {
+          return new Response(null, { headers: { location: 'https://storage.googleapis.com/upload/session' } })
+        }
+        if (++calls === 1) throw new TypeError('Interrupted first chunk')
+        assert.equal(new Headers(request.headers).get('Content-Range'), 'bytes */17825792')
+        return status
+      },
+    })
+    await assert.rejects(store.put('library/originals/fixture', body, { match: '0' }), message)
+    assert.equal(calls, 2)
+  }
+})

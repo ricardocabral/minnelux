@@ -149,15 +149,14 @@ async function resumeUpload(session, body, request, signal) {
     }
     if (response.status !== 308) {
       const { generation } = await checkedJson(response)
-      if (!query && end !== body.size) throw new Error('Cloud Storage completed the upload before the final chunk')
+      if (end !== body.size) throw new Error('Cloud Storage completed the upload before the final chunk')
       requireGeneration(generation)
       return { generation }
     }
     const received = response.headers.get('range')
     await response.body?.cancel()
     const persisted = received === null ? 0 : Number(/^bytes=0-(\d+)$/.exec(received)?.[1]) + 1
-    if (!Number.isSafeInteger(persisted) || persisted < offset || persisted >= body.size ||
-        (!query && persisted > end)) {
+    if (!Number.isSafeInteger(persisted) || persisted < offset || persisted >= body.size || persisted > end) {
       throw new Error('Cloud Storage returned an invalid upload offset')
     }
     if (persisted > offset) failures = 0
