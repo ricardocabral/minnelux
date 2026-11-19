@@ -17,9 +17,8 @@ type AppProps = {
   isFixture?: boolean
   connectionNotice?: string
   checkingConnection?: boolean
-  durable?: boolean
-  onRetrySignOut?: () => void
-  onConnect?: (configuration: ConnectionSettings) => Promise<void>
+  onRemoveSavedLogin?: () => void
+  onConnect?: (configuration: ConnectionSettings, rememberLogin: boolean) => Promise<void>
   onCancelConnect?: () => void
   onOpenFixture?: () => void
   onDisconnect?: () => void
@@ -34,18 +33,19 @@ const connectionMessages = new Map<string, ConnectionFeedback>([
   ['invalidBucket', { text: 'Enter a valid S3 bucket name.', role: 'alert' }],
 ])
 
-export default function AppView({ client, isFixture, connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onCancelConnect, onOpenFixture, onDisconnect }: AppProps) {
-  return client ? <ConnectedLibrary client={client} isFixture={isFixture} onDisconnect={onDisconnect} />
-    : <Connect connectionNotice={connectionNotice} checkingConnection={checkingConnection} durable={durable}
-      onRetrySignOut={onRetrySignOut} onConnect={onConnect} onCancelConnect={onCancelConnect} onOpenFixture={onOpenFixture} />
+export default function AppView({ client, isFixture, connectionNotice, checkingConnection, onRemoveSavedLogin, onConnect, onCancelConnect, onOpenFixture, onDisconnect }: AppProps) {
+  return client ? <ConnectedLibrary client={client} isFixture={isFixture} connectionNotice={connectionNotice} onDisconnect={onDisconnect} />
+    : <Connect connectionNotice={connectionNotice} checkingConnection={checkingConnection}
+      onRemoveSavedLogin={onRemoveSavedLogin} onConnect={onConnect} onCancelConnect={onCancelConnect} onOpenFixture={onOpenFixture} />
 }
 
-function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut, onConnect, onCancelConnect, onOpenFixture }: Pick<AppProps,
-  'connectionNotice' | 'checkingConnection' | 'durable' | 'onRetrySignOut' | 'onConnect' | 'onCancelConnect' | 'onOpenFixture'
+function Connect({ connectionNotice, checkingConnection, onRemoveSavedLogin, onConnect, onCancelConnect, onOpenFixture }: Pick<AppProps,
+  'connectionNotice' | 'checkingConnection' | 'onRemoveSavedLogin' | 'onConnect' | 'onCancelConnect' | 'onOpenFixture'
 >) {
   const { pathname } = useLocation()
   const [provider, setProvider] = useState<ConnectionSettings['provider']>('gcs')
   const [pending, setPending] = useState(false)
+  const [hideRememberHelp, setHideRememberHelp] = useState(false)
   const providerName = provider === 'gcs' ? 'Google Cloud Storage' : 'Amazon S3'
   const [feedback, setFeedback] = useState<ConnectionFeedback>()
 
@@ -65,7 +65,7 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
         ...location, provider, region: setting('region'), cognitoOrigin: setting('cognitoOrigin'),
         clientId: setting('cognitoClientId'), userPoolId: setting('userPoolId'),
         identityPoolId: setting('identityPoolId'), editorGroup: setting('editorGroup') || undefined,
-      })
+      }, provider === 'gcs' && fields.has('rememberLogin'))
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? error.code : undefined
       const message = typeof code === 'string' ? connectionMessages.get(code) : undefined
@@ -85,10 +85,10 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
       <h1>Open your library</h1>
       {connectionNotice ? <p role="status">{connectionNotice}</p> : null}
       {checkingConnection ? (!connectionNotice ? <p role="status">Checking for a saved connection…</p> : null)
-      : onRetrySignOut ? <button type="button" className="control primary" onClick={onRetrySignOut}>Retry sign-out</button>
+      : onRemoveSavedLogin ? <button type="button" className="control primary" onClick={onRemoveSavedLogin}>Remove saved login</button>
       : onConnect ? <>
         <form className="connect-form" onSubmit={event => void connect(event)} aria-busy={pending}>
-          {durable ? null : <label>Storage provider
+          <label>Storage provider
             <select value={provider} disabled={pending} onChange={event => {
               setProvider(event.target.value === 's3' ? 's3' : 'gcs')
               setFeedback(undefined)
@@ -96,17 +96,25 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
               <option value="gcs">Google Cloud Storage</option>
               <option value="s3">Amazon S3</option>
             </select>
-          </label>}
+          </label>
           <label>Bucket name <input name="bucket" required autoComplete="off" disabled={pending} /></label>
           <label>Library prefix <input name="prefix" autoComplete="off" disabled={pending} /></label>
           {provider === 'gcs' ? <>
-            {durable ? null : <label>Google OAuth client ID <input key="googleClientId" name="googleClientId" required autoComplete="off" disabled={pending} /></label>}
+            <label>Google OAuth client ID <input key="googleClientId" name="googleClientId" required autoComplete="off" disabled={pending} /></label>
             <label>Access
               <select name="access" disabled={pending}>
                 <option value="read">Read only</option>
                 <option value="edit">Read and edit</option>
               </select>
             </label>
+            <div className="remember-login">
+              <label><input type="checkbox" name="rememberLogin" autoComplete="off" aria-describedby="remember-login-tip" disabled={pending} /> Remember login</label>
+              <button type="button" className="remember-help" aria-label="About Remember login" aria-describedby="remember-login-tip"
+                onFocus={() => setHideRememberHelp(false)} onPointerEnter={() => setHideRememberHelp(false)}
+                onKeyDown={event => { if (event.key === 'Escape') setHideRememberHelp(true) }}
+                onClick={event => { setHideRememberHelp(false); event.currentTarget.focus() }}>?</button>
+              <span id="remember-login-tip" role="tooltip" hidden={hideRememberHelp}>Google credentials will be saved in this browser until they expire or you disconnect. Use this only on a trusted device.</span>
+            </div>
           </> : <>
             <label>AWS region <input name="region" required autoComplete="off" disabled={pending} /></label>
             <label>Cognito managed login URL <input name="cognitoOrigin" type="url" required autoComplete="off" disabled={pending} /></label>
@@ -122,7 +130,7 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
           {feedback ? <p role={feedback.role} className={feedback.role === 'alert' ? 'form-error' : undefined}>{feedback.text}</p> : null}
         </form>
       </> : <p>Storage connections are unavailable in this build.</p>}
-      {onOpenFixture && !checkingConnection && !onRetrySignOut ? <div className="connect-footer">
+      {onOpenFixture && !checkingConnection && !onRemoveSavedLogin ? <div className="connect-footer">
         <button type="button" className={onConnect ? 'control' : 'control primary'} onClick={onOpenFixture} disabled={pending}>
           Open sample library
         </button>
@@ -131,9 +139,10 @@ function Connect({ connectionNotice, checkingConnection, durable, onRetrySignOut
   </>
 }
 
-function ConnectedLibrary({ client, isFixture, onDisconnect }: {
+function ConnectedLibrary({ client, isFixture, connectionNotice, onDisconnect }: {
   client: LibraryClient
   isFixture?: boolean
+  connectionNotice?: string
   onDisconnect?: () => void
 }) {
   const { pathname } = useLocation()
@@ -234,6 +243,7 @@ function ConnectedLibrary({ client, isFixture, onDisconnect }: {
         </div>
       </div>
     </header>
+    {connectionNotice ? <div className="notice" role="status">{connectionNotice}</div> : null}
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-inner">

@@ -10,7 +10,7 @@
 
 Minnelux is a self-hosted web app for browsing, searching, and organizing media in private cloud storage you control. It keeps your originals and the library catalog in your bucket.
 
-The standard app runs entirely in your browser. Self-hosting requires only static HTTPS file hosting for the app and a private cloud bucket for the library.
+The app runs entirely in your browser. Self-hosting requires only static HTTPS file hosting for the app and a private cloud bucket for the library.
 
 - **Privacy.** Your browser connects directly to your storage and identity provider.
 - **Preservation.** Organize your library with tags while keeping the original files intact.
@@ -29,7 +29,7 @@ The standard app runs entirely in your browser. Self-hosting requires only stati
 - [Run or self-host the web client](apps/web/README.md)
 - [Connect Google Cloud Storage with Google sign-in](docs/prod/connect-google-cloud-storage.md)
 - [Connect Amazon S3 with Cognito](docs/prod/connect-amazon-s3.md)
-- [Keep Google libraries connected across reloads](apps/web/README.md#stay-connected-across-reloads)
+- [Remember a Google Cloud Storage login](apps/web/README.md#stay-connected-across-reloads)
 - [Import or browse a Flickr account export](apps/flickr-import/README.md)
 
 ## Reference

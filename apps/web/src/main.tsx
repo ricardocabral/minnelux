@@ -1,18 +1,23 @@
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
 import { connectLibraryClient } from './library/worker-client.ts'
-import { libraryProtocolVersion, type WorkerStart } from './library/worker-contract.ts'
-import { authorizeConnection, libraryPrefix, type ConnectionSettings } from './storage/connection.ts'
-import { endDurableSession, reportRejectedGrant, resumeDurableSession, startDurableSession } from './storage/durable-session.ts'
+import { libraryProtocolVersion, type AuthorizedLibrarySource, type WorkerStart } from './library/worker-contract.ts'
+import { authorizeConnection, type ConnectionSettings } from './storage/connection.ts'
+import { forgetGoogleLogin, rememberGoogleLogin, restoreGoogleLogin } from './storage/remembered-google-login.ts'
 import AppView from './ui/App.tsx'
 
 const root = createRoot(document.getElementById('root')!)
-let active: { id: string; client: ReturnType<typeof connectLibraryClient>; close(): void; kind: WorkerStart['source']['kind'] } | undefined
+let active: {
+  id: string
+  client: ReturnType<typeof connectLibraryClient>
+  close(): void
+  kind: WorkerStart['source']['kind']
+  rememberedId?: string
+} | undefined
 let connecting: AbortController | undefined
 let connectionNotice: string | undefined
-const durable = import.meta.env.VITE_DURABLE_GCS_SESSION === '1'
-let restoring = durable
-let retrySignOut = false
+let checkingConnection = true
+let removeSavedLogin: (() => void) | undefined
 
 function disconnect(notice?: string) {
   connectionNotice = notice
@@ -22,21 +27,56 @@ function disconnect(notice?: string) {
   render()
 }
 
-function connectionLost(notice: string) {
-  const pending = active?.client.hasUnconfirmedPublication()
-  disconnect(pending ? notice + ' A publication may have succeeded. Check the library before importing the photo again.' : notice)
+async function forgetAndDisconnect(rememberedId: string, notice?: string) {
+  checkingConnection = true
+  removeSavedLogin = undefined
+  disconnect(notice ?? 'Removing saved login…')
+  try {
+    await forgetGoogleLogin(rememberedId)
+    connectionNotice = notice
+  } catch {
+    const failure = 'The browser could not remove the saved login. Try again.'
+    connectionNotice = notice ? notice + ' ' + failure : failure
+    removeSavedLogin = () => void forgetAndDisconnect(rememberedId, notice)
+  } finally {
+    checkingConnection = false
+    render()
+  }
 }
 
-function start(source: WorkerStart['source'], close: () => void = () => {},
-  onExpired = () => connectionLost('The session expired. Connect again.')) {
+function closeConnection(notice?: string) {
+  if (active?.rememberedId) void forgetAndDisconnect(active.rememberedId, notice)
+  else disconnect(notice)
+}
+
+function connectionLost(notice: string, preserveLogin = false) {
+  const pending = active?.client.hasUnconfirmedPublication()
+  const publication = pending ? ' A publication may have succeeded. Check the library before importing the photo again.' : ''
+  const rememberedId = active?.rememberedId
+  if (preserveLogin && rememberedId) {
+    removeSavedLogin = () => void forgetAndDisconnect(rememberedId)
+    disconnect(notice + ' Reload to reconnect, or remove the saved login.' + publication)
+  } else {
+    closeConnection(notice + ' Connect again.' + publication)
+  }
+}
+
+function start(source: WorkerStart['source'], close: () => void = () => {}, rememberedId?: string) {
   const id = crypto.randomUUID()
   const worker = new Worker(new URL('./library/worker.ts', import.meta.url), { type: 'module' })
   const client = connectLibraryClient(worker, id, () => {
-    if (active?.id === id) onExpired()
+    if (active?.id === id) connectionLost('The session expired.')
   })
+  try {
+    worker.postMessage({ kind: 'start', version: libraryProtocolVersion, sessionId: id, source } satisfies WorkerStart)
+  } catch (error) {
+    client.close()
+    worker.terminate()
+    throw error
+  }
   active?.close()
   active = {
-    id, kind: source.kind, client,
+    id, kind: source.kind, client, rememberedId,
     close() {
       client.close()
       worker.terminate()
@@ -44,39 +84,49 @@ function start(source: WorkerStart['source'], close: () => void = () => {},
     },
   }
   worker.addEventListener('error', () => {
-    if (active?.id === id) connectionLost('The library process stopped. Connect again.')
+    if (active?.id === id) connectionLost('The library process stopped.', true)
   }, { once: true })
-  worker.postMessage({ kind: 'start', version: libraryProtocolVersion, sessionId: id, source } satisfies WorkerStart)
   render()
 }
 
-async function connect(settings: ConnectionSettings) {
-  if (durable && settings.provider === 'gcs') {
-    return startDurableSession({ ...settings, prefix: libraryPrefix(settings.prefix) })
+function startAuthorized(source: AuthorizedLibrarySource, closeSession?: () => void, rememberedId?: string) {
+  const expiry = setTimeout(
+    () => connectionLost('The session expired.'),
+    Math.max(0, source.expiresAt - Date.now()),
+  )
+  function close() {
+    clearTimeout(expiry)
+    closeSession?.()
   }
+  try {
+    start(source, close, rememberedId)
+  } catch (error) {
+    close()
+    throw error
+  }
+}
+
+async function connect(settings: ConnectionSettings, rememberLogin: boolean) {
   connecting?.abort()
   const attempt = new AbortController()
   connecting = attempt
   try {
     const session = await authorizeConnection(settings, attempt.signal)
+    let rememberedId: string | undefined
+    connectionNotice = undefined
+    if (rememberLogin && session.source.kind === 'gcs') {
+      try {
+        rememberedId = await rememberGoogleLogin(session.source)
+      } catch {
+        connectionNotice = 'The browser could not save this login. Connect again after reloading.'
+      }
+    }
     if (attempt.signal.aborted) {
       session.close()
+      if (rememberedId) await forgetGoogleLogin(rememberedId)
       return
     }
-    const expiry = setTimeout(
-      () => connectionLost('The session expired. Connect again.'),
-      Math.max(0, session.source.expiresAt - Date.now()),
-    )
-    function close() {
-      clearTimeout(expiry)
-      session.close()
-    }
-    try {
-      start(session.source, close)
-    } catch (error) {
-      close()
-      throw error
-    }
+    startAuthorized(session.source, session.close, rememberedId)
   } catch (error) {
     if (!attempt.signal.aborted) throw error
   } finally {
@@ -85,54 +135,13 @@ async function connect(settings: ConnectionSettings) {
 }
 
 async function restore() {
-  const url = new URL(location.href)
-  if (url.searchParams.get('signIn') === 'failed') {
-    url.searchParams.delete('signIn')
-    history.replaceState(history.state, '', url)
-    connectionNotice = 'Google sign-in could not be completed. Connect again.'
-  } else {
-    try {
-      const restored = await resumeDurableSession()
-      if (restored) {
-        const { source, grantId } = restored
-        const expiry = setTimeout(() => connectionLost('Your access token expired. Reload to reconnect.'),
-          Math.max(0, source.expiresAt - Date.now()))
-        start(source, () => clearTimeout(expiry), () => void rejectDurableGrant(grantId))
-      }
-    } catch {
-      connectionNotice = 'The saved session could not be restored. Try reloading this page.'
-    }
-  }
-  restoring = false
-  render()
-}
-
-async function rejectDurableGrant(grantId: string) {
-  restoring = true
-  connectionLost('Your access token was rejected.')
   try {
-    await reportRejectedGrant(grantId)
-    connectionNotice += ' Reload to reconnect.'
+    const saved = await restoreGoogleLogin()
+    if (saved) startAuthorized(saved.source, undefined, saved.id)
   } catch {
-    connectionNotice += ' Connect again.'
+    // A browser that disallows IndexedDB can still connect for this page.
   } finally {
-    restoring = false
-    render()
-  }
-}
-
-async function signOut() {
-  restoring = true
-  retrySignOut = false
-  disconnect('Signing out…')
-  try {
-    await endDurableSession()
-    connectionNotice = undefined
-  } catch {
-    connectionNotice = 'The server could not sign you out. Try again.'
-    retrySignOut = true
-  } finally {
-    restoring = false
+    checkingConnection = false
     render()
   }
 }
@@ -142,19 +151,18 @@ function render() {
     key={active?.id ?? 'connect'}
     client={active?.client}
     isFixture={active?.kind === 'sample'}
-    durable={durable}
-    checkingConnection={restoring}
-    onRetrySignOut={retrySignOut ? () => void signOut() : undefined}
+    checkingConnection={checkingConnection}
+    onRemoveSavedLogin={removeSavedLogin}
     onConnect={connect}
     onCancelConnect={() => connecting?.abort()}
     onOpenFixture={import.meta.env.MODE === 'test' ? () => {
       connecting?.abort()
       start({ kind: 'sample' })
     } : undefined}
-    onDisconnect={durable && active?.kind === 'gcs' ? () => void signOut() : () => disconnect()}
+    onDisconnect={() => closeConnection()}
     connectionNotice={connectionNotice}
   /></HashRouter>)
 }
 
 render()
-if (durable) void restore()
+void restore()

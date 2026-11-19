@@ -2,4 +2,3 @@ dist/
 dist-test/
 playwright-report/
 test-results/
-dist-session-test/

@@ -20,13 +20,13 @@ Check `git status --short --branch` and compare `HEAD` with `origin/main` before
 | Flickr ZIPs and catalog conversion | [Importer guide](apps/flickr-import/README.md), [importer spec](docs/dev/flickr-import/SPEC.md), and [repository contract](docs/dev/flickr-import/REPOSITORY-CONTRACT.md) |
 | Provider behavior and live checks | [GCS browser proof](spikes/gcs/README.md), [S3 browser proof](spikes/s3/README.md), and [S3 owner setup](docs/prod/connect-amazon-s3.md) |
 
-The default client runs on static HTTPS and accesses the library owner's private bucket directly. Keep provider behavior inside adapters. The optional Google session server handles durable sign-in while storage requests still go directly from the browser to GCS. [Web client setup](apps/web/README.md#stay-connected-across-reloads)
+The client runs on static HTTPS and accesses the library owner's private bucket directly. Keep provider behavior inside adapters. **Remember login** saves one short-lived Google Cloud Storage login in browser IndexedDB when the user opts in. [Web client setup](apps/web/README.md#stay-connected-across-reloads)
 
 Preserve original bytes and publish revisions by conditionally updating the library head. The standalone Flickr importer runs in a browser and generates supported previews locally. The web client reads Flickr v1 revisions and writes v2 manifests. Preserve source metadata and media references through edits and upgrades.
 
 ## Verify the affected path
 
-- **Web client.** Use Node 24 or later. In `apps/web`, run `npm ci`, then the relevant checks from `npm run check`, `npm test`, and `npm run build`. For browser behavior, install Chromium with `npx playwright install chromium` and run `npm run test:browser` with a focused filter. Playwright starts a synthetic fixture server on port 4173. Use `npm run test:session` for durable Google sign-in changes. [Web client setup](apps/web/README.md)
+- **Web client.** Use Node 24 or later. In `apps/web`, run `npm ci`, then the relevant checks from `npm run check`, `npm test`, and `npm run build`. For browser behavior, install Chromium with `npx playwright install chromium` and run `npm run test:browser` with a focused filter. Playwright starts a synthetic fixture server on port 4173. For Google sign-in changes, run `npm run test:browser -- google-login.browser.spec.ts`. [Web client setup](apps/web/README.md)
 - **Flickr importer.** In `apps/flickr-import`, run `npm ci`, `npm test`, and `npm run build`. Use the [synthetic export](apps/flickr-import/README.md#verify-with-a-synthetic-export) and the [Flickr export format reference](docs/dev/flickr-import/EXPORT-FORMAT.md). Use synthetic data by default and a dedicated private test library for hosted checks.
 
 ## Firebase Hosting
