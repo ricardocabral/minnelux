@@ -1,9 +1,9 @@
 import { inspectJpeg, MAX_JPEG_HEADER_BYTES } from './jpeg.mjs'
 
-const maxPreviewSize = 360
+export const maxPreviewSize = 360
 const maxImagePixels = 80_000_000
-const maxPreviewBytes = 48 * 1024 ** 2
-const previewImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+export const maxPreviewBytes = 48 * 1024 ** 2
+export const previewImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 const exifRotation = new Map([[3, 180], [6, 90], [8, 270]])
 
 export async function makePreview(original, metadata, signal) {
@@ -15,10 +15,9 @@ export async function makePreview(original, metadata, signal) {
   }).blob()
   signal?.throwIfAborted()
   if (type.startsWith('image/')) {
-    const header = new DataView(await blob.slice(0, MAX_JPEG_HEADER_BYTES).arrayBuffer())
-    const { orientation, width, height } = inspectImage(type, header)
-    if (!width || !height || width * height > maxImagePixels) return undefined
-    if (orientation) metadata.exifOrientation = orientation
+    const imageInfo = await readPreviewImage(blob, type)
+    if (!imageInfo) return undefined
+    if (imageInfo.orientation) metadata.exifOrientation = imageInfo.orientation
     let image
     try {
       image = await createImageBitmap(blob, { imageOrientation: 'from-image' })
@@ -34,7 +33,13 @@ export async function makePreview(original, metadata, signal) {
   if (type.startsWith('video/')) return drawVideo(blob, metadata, signal)
 }
 
-function displayRotation(metadata) {
+export async function readPreviewImage(blob, type) {
+  const header = new DataView(await blob.slice(0, MAX_JPEG_HEADER_BYTES).arrayBuffer())
+  const info = inspectImage(type, header)
+  return info.width && info.height && info.width * info.height <= maxImagePixels ? info : undefined
+}
+
+export function displayRotation(metadata) {
   const flickr = metadata.flickrRotation ?? 0
   return flickr === exifRotation.get(metadata.exifOrientation) ? 0 : flickr
 }

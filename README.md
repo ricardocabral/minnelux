@@ -31,12 +31,14 @@ The app runs entirely in your browser. Self-hosting requires only static HTTPS f
 - [Connect Google Cloud Storage with Google sign-in](docs/prod/connect-google-cloud-storage.md)
 - [Connect Amazon S3 with Cognito](docs/prod/connect-amazon-s3.md)
 - [Remember a Google Cloud Storage login](apps/web/README.md#stay-connected-across-reloads)
-- [Import or browse a Flickr account export](apps/flickr-import/README.md)
+- [Import or browse a Flickr account export in the browser](apps/flickr-import/README.md)
+- [Import large Flickr exports from the command line](docs/prod/import-flickr-cli.md)
 
 ## Reference
 
 - [Screenshots and feature reference](docs/prod/screenshots.md)
 - [Library compatibility and import limits](docs/prod/library-compatibility.md)
+- [Flickr importer CLI options and exit codes](docs/prod/library-compatibility.md#flickr-importer-cli)
 - [Storage and library format specification](docs/dev/storage/SPEC.md)
 
 ## Explanation

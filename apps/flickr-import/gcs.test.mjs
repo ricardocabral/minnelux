@@ -98,3 +98,35 @@ test('cancels the media stream when it exceeds the observed size', async () => {
   assert.equal(cancelled, true)
   assert.ok(reads < 20)
 })
+
+test('resumes a conditional large upload from the byte offset GCS reports', async () => {
+  const body = new Blob([new Uint8Array(17 * 1024 ** 2)], { type: 'image/jpeg' })
+  const ranges = []
+  const store = createGcsStore('minnelux-test', async () => 'fixture-token', {
+    resumable: true,
+    fetch: async (url, request) => {
+      if (request.method === 'POST') {
+        assert.equal(url.searchParams.get('uploadType'), 'resumable')
+        assert.equal(url.searchParams.get('ifGenerationMatch'), '0')
+        assert.deepEqual(JSON.parse(request.body), { name: 'library/large.jpg', contentType: 'image/jpeg' })
+        return new Response(null, { headers: { location: 'https://storage.googleapis.com/upload/session?upload_id=fixture' } })
+      }
+      assert.equal(request.method, 'PUT')
+      assert.equal(new URL(url).origin, 'https://storage.googleapis.com')
+      const range = new Headers(request.headers).get('Content-Range')
+      ranges.push(range)
+      if (ranges.length === 1) throw new TypeError('Interrupted upload')
+      if (ranges.length < 4) {
+        return new Response(null, { status: 308, headers: {
+          range: ranges.length === 2 ? 'bytes=0-4194303' : 'bytes=0-12582911',
+        } })
+      }
+      return Response.json({ generation: '12345' })
+    },
+  })
+  assert.deepEqual(await store.put('library/large.jpg', body, { match: '0' }), { generation: '12345' })
+  assert.deepEqual(ranges, [
+    'bytes 0-8388607/17825792', 'bytes */17825792',
+    'bytes 4194304-12582911/17825792', 'bytes 12582912-17825791/17825792',
+  ])
+})

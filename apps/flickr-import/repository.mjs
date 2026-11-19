@@ -66,9 +66,9 @@ async function mapBounded(items, apply, parallel = 8) {
   await Promise.all(Array.from({length: Math.min(items.length, parallel)}, run));
   if (failure) throw failure;
 }
-async function boundedBlob(stream, maximum, code, signal) {
+function boundedStream(stream, maximum, code, signal) {
   let total = 0;
-  const measured = stream.pipeThrough(new TransformStream({
+  return stream.pipeThrough(new TransformStream({
     transform(chunk, controller) {
       signal?.throwIfAborted();
       check(chunk instanceof Uint8Array, code);
@@ -77,7 +77,9 @@ async function boundedBlob(stream, maximum, code, signal) {
       controller.enqueue(chunk);
     },
   }), {signal});
-  return new Response(measured).blob();
+}
+async function boundedBlob(stream, maximum, code, signal) {
+  return new Response(boundedStream(stream,maximum,code,signal)).blob();
 }
 async function compressed(value) {
   const json = new Blob([canonical(value)]);
@@ -377,7 +379,7 @@ function protectSource(source, old) {
   }
 }
 
-export function createFlickrRepository(store, {prefix = 'library', uploadConcurrency = 16} = {}) {
+export function createFlickrRepository(store, {prefix = 'library', uploadConcurrency = 16, stageUpload} = {}) {
   check(pathSegments(prefix), 'invalidReference');
   const pinned = new Map();
   const get = (key, signal, maxBytes) => store.get(prefix + '/' + key, {signal,maxBytes});
@@ -502,24 +504,32 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
     } catch (error) { fail(errorCode(error)); }
   }
   async function storeUpload(upload,ref,rawIds,signal) {
-    let blob;
+    let staged;
     try {
-      blob = await boundedBlob(await upload.openBytes(signal),upload.byteLength,'integrity',signal);
-    } catch (error) {
-      if (error.code === 'integrity' || errorCode(error) === 'aborted') throw error;
-      fail('unreadableBytes');
+      let blob;
+      try {
+        const bytes = boundedStream(await upload.openBytes(signal),upload.byteLength,'integrity',signal);
+        staged = stageUpload && upload.byteLength > 16 * 1024 ** 2
+          ? await stageUpload(bytes,ref.mimeType,signal) : undefined;
+        blob = staged?.body ?? await new Response(bytes).blob();
+      } catch (error) {
+        if (error.code === 'integrity' || errorCode(error) === 'aborted') throw error;
+        fail('unreadableBytes');
+      }
+      check(blob.size === ref.byteLength && await digest(blob) === ref.sha256,'integrity');
+      if (rawIds) {
+        let json;
+        try { json = JSON.parse(await blob.text()); } catch { fail('invalidPlan'); }
+        if (ref.kind === 'album-json') check(Array.isArray(json?.albums));
+        const ids = ref.kind === 'photo-json' ? [json?.id] : json.albums.map(a => a?.id);
+        const present = new Set(ids);
+        for (const id of rawIds) check(present.has(id));
+      }
+      const result = await immutable(ref.key,blob.slice(0,blob.size,ref.mimeType),ref.sha256,signal);
+      ref.observedVersion = result.generation;
+    } finally {
+      await staged?.dispose();
     }
-    check(blob.size === ref.byteLength && await digest(blob) === ref.sha256,'integrity');
-    if (rawIds) {
-      let json;
-      try { json = JSON.parse(await blob.text()); } catch { fail('invalidPlan'); }
-      if (ref.kind === 'album-json') check(Array.isArray(json?.albums));
-      const ids = ref.kind === 'photo-json' ? [json?.id] : json.albums.map(a => a?.id);
-      const present = new Set(ids);
-      for (const id of rawIds) check(present.has(id));
-    }
-    const result = await immutable(ref.key,blob.slice(0,blob.size,ref.mimeType),ref.sha256,signal);
-    ref.observedVersion = result.generation;
   }
   async function publishFlickrImport(input,{mode='publish',signal,onProgress} = {}) {
     const unknown = code => ({status:'outcomeUnknown',operationId:input.operationId,...(code ? {code} : {})});

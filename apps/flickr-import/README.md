@@ -1,6 +1,8 @@
 # Import a Flickr account export
 
-The Flickr importer is a standalone browser app. It reads export ZIPs locally and sends originals, Flickr metadata, and generated previews directly to your private Google Cloud Storage bucket. [Library compatibility and file limits](../../docs/prod/library-compatibility.md)
+Flickr is Minnelux's only data importer plugin. The browser app supports interactive imports. It reads export ZIPs locally and sends originals, Flickr metadata, and generated previews directly to your private Google Cloud Storage bucket. [Library compatibility and file limits](../../docs/prod/library-compatibility.md)
+
+For large unattended batches, use the [Flickr importer CLI](../../docs/prod/import-flickr-cli.md).
 
 ## Import a Flickr export
 

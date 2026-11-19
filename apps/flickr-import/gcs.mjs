@@ -1,9 +1,10 @@
+const resumableChunkBytes = 8 * 1024 ** 2
 const maxObjectBytes = 1024 ** 3
 const storageOrigin = 'https://storage.googleapis.com'
 const generationPattern = /^\d+$/
 const bucketPattern = /^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/
 
-export function createGcsStore(bucket, getToken, { fetch: request = globalThis.fetch } = {}) {
+export function createGcsStore(bucket, getToken, { fetch: request = globalThis.fetch, resumable = false } = {}) {
   if (!bucketPattern.test(bucket)) {
     throw new TypeError('Enter a Cloud Storage bucket name')
   }
@@ -12,7 +13,7 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
 
   async function send(url, options, signal) {
     signal?.throwIfAborted()
-    const token = await getToken()
+    const token = await getToken(signal)
     if (!token) throw Object.assign(new Error('Sign in to Cloud Storage'), { status: 401 })
     const headers = new Headers(options.headers)
     headers.set('Authorization', `Bearer ${token}`)
@@ -64,6 +65,23 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
         throw new TypeError('Cloud Storage writes require a generation precondition')
       }
       const url = new URL(`/upload/storage/v1/b/${encodedBucket}/o`, storageOrigin)
+      if (resumable && body.size > 2 * resumableChunkBytes) {
+        url.search = new URLSearchParams({ uploadType: 'resumable', ifGenerationMatch: match, fields: 'generation' })
+        const response = await send(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Upload-Content-Length': String(body.size),
+            'X-Upload-Content-Type': body.type || 'application/octet-stream' },
+          body: JSON.stringify({ name: key, contentType: body.type || 'application/octet-stream' }),
+        }, signal)
+        checkStatus(response)
+        const location = response.headers.get('location')
+        const session = location && URL.canParse(location) ? new URL(location) : null
+        await response.body?.cancel()
+        if (!session || session.origin !== storageOrigin || session.username || session.password || session.hash) {
+          throw new Error('Cloud Storage did not return a valid upload session')
+        }
+        return resumeUpload(session, body, request, signal)
+      }
       url.search = new URLSearchParams({
         uploadType: 'multipart',
         ifGenerationMatch: match,
@@ -91,6 +109,57 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
       return { generation }
     },
   }
+}
+
+async function resumeUpload(session, body, request, signal) {
+  let offset = 0
+  let query = false
+  let failures = 0
+  while (failures < 4) {
+    signal?.throwIfAborted()
+    const end = Math.min(body.size, offset + resumableChunkBytes)
+    const range = query ? `bytes */${body.size}` : `bytes ${offset}-${end - 1}/${body.size}`
+    let response
+    try {
+      response = await request(session, {
+        method: 'PUT',
+        headers: { 'Content-Range': range, 'Content-Length': String(query ? 0 : end - offset) },
+        body: query ? undefined : body.slice(offset, end),
+        redirect: 'manual',
+        credentials: 'omit',
+        signal,
+      })
+    } catch {
+      signal?.throwIfAborted()
+    }
+    if (!response || [408, 429, 500, 502, 503, 504].includes(response.status)) {
+      await response?.body?.cancel()
+      failures++
+      query = true
+      if (failures < 4) {
+        await new Promise(resolve => setTimeout(resolve, 250 * 2 ** (failures - 1)))
+      }
+      continue
+    }
+    if (response.status !== 308) {
+      const { generation } = await checkedJson(response)
+      if (!query && end !== body.size) throw new Error('Cloud Storage completed the upload before the final chunk')
+      requireGeneration(generation)
+      return { generation }
+    }
+    const received = response.headers.get('range')
+    await response.body?.cancel()
+    const persisted = received === null ? 0 : Number(/^bytes=0-(\d+)$/.exec(received)?.[1]) + 1
+    if (!Number.isSafeInteger(persisted) || persisted < offset || persisted >= body.size ||
+        (!query && persisted > end)) {
+      throw new Error('Cloud Storage returned an invalid upload offset')
+    }
+    if (persisted > offset) failures = 0
+    else if (!query) failures++
+    offset = persisted
+    query = false
+  }
+  throw new Error('Cloud Storage resumable upload stalled')
 }
 
 function corruptSize(message) {
