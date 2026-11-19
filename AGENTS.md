@@ -27,7 +27,7 @@ Preserve original bytes and publish revisions by conditionally updating the libr
 ## Verify the affected path
 
 - **Web client.** Use Node 24 or later. In `apps/web`, run `npm ci`, then the relevant checks from `npm run check`, `npm test`, and `npm run build`. For browser behavior, install Chromium with `npx playwright install chromium` and run `npm run test:browser` with a focused filter. Playwright starts a synthetic fixture server on port 4173. Use `npm run test:session` for durable Google sign-in changes. [Web client setup](apps/web/README.md)
-- **Flickr importer.** In `apps/flickr-import`, run `npm ci`, `npm test`, and `npm run build`. Generate sanitized multipart ZIPs from the repository root with `node spikes/flickr/pack-fixture.mjs`. Use the [Flickr export handoff](docs/flickr/HANDOFF.md) for source format and matching rules. Use synthetic data by default and a dedicated private test library for hosted checks.
+- **Flickr importer.** In `apps/flickr-import`, run `npm ci`, `npm test`, and `npm run build`. Use the [synthetic export](apps/flickr-import/README.md#verify-with-a-synthetic-export) and the [Flickr export format reference](docs/dev/flickr-import/EXPORT-FORMAT.md). Use synthetic data by default and a dedicated private test library for hosted checks.
 
 ## Firebase Hosting
 

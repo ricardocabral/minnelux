@@ -136,7 +136,7 @@ test('publishes a JPEG through the S3 connector and finds it in a fresh Cognito 
   const dialog = page.getByRole('dialog', { name: 'Import media' })
   await dialog.getByLabel('JPEG photo').setInputFiles({
     name: 'S3 fixture.jpg', mimeType: 'image/jpeg',
-    buffer: await readFile(new URL('../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url)),
+    buffer: await readFile(new URL('../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url)),
   })
   await dialog.getByRole('textbox', { name: 'First tag' }).fill('Family')
   await dialog.getByRole('textbox', { name: 'Second tag' }).fill('Travel')

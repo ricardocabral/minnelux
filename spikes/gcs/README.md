@@ -43,7 +43,7 @@ Firebase Hosting replaces the site's complete file set on each deploy. Stage the
 stage=$(mktemp -d)
 web_ref=fb380709396ca4e7d98e94d217b81dc6953b71c6
 mkdir -p "$stage/web-source" &&
-git archive HEAD apps/flickr-import spikes/flickr spikes/gcs | tar -x -C "$stage" &&
+git archive HEAD apps/flickr-import spikes/gcs | tar -x -C "$stage" &&
 git archive "$web_ref" apps/flickr-import apps/web docs/mkt/logo | tar -x -C "$stage/web-source" &&
 (
   cd "$stage/apps/flickr-import" &&

@@ -1,9 +1,7 @@
-export const sourceKey = "synthetic-flickr";
 export const ids = {
   photo: "9007199254740993",
   video: "9007199254740994",
   pending: "9007199254740995",
-  unknown: "9007199254740996",
 };
 
 export const metadataFirst = {

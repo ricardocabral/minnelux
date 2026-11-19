@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { crc32, deflateRawSync } from "node:zlib";
-import { ids, metadataFirst } from "../../spikes/flickr/fixture.mjs";
+import { ids, metadataFirst } from "./test-fixtures/fixture.mjs";
 import { prepareFlickrImport } from "./plan.mjs";
 import { scanFlickrZip } from "./zip.mjs";
 
-const jpeg = await readFile(new URL("../../spikes/flickr/fixtures/photo.jpg", import.meta.url));
-const mp4 = await readFile(new URL("../../spikes/flickr/fixtures/video.mp4", import.meta.url));
+const jpeg = await readFile(new URL("./test-fixtures/photo.jpg", import.meta.url));
+const mp4 = await readFile(new URL("./test-fixtures/video.mp4", import.meta.url));
 const sidecar = JSON.stringify(metadataFirst.sidecars[0].json);
 
 // Independent ZIP fixture writer for corrupt entries and repeated central-directory names.

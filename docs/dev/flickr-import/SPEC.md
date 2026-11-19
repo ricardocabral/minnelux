@@ -1,6 +1,6 @@
 # Flickr importer specification
 
-The Flickr importer turns a Flickr account data export into a private Minnelux library. The owner can add metadata and media ZIPs in any order, preview the proposed changes, and resume from another authorized browser. Minnelux keeps the original bytes and relevant source JSON. Flickr albums become Minnelux tags, so one original can appear in multiple collections. [Minnelux PRD](../../prod/minnelux-prd.md) · [Flickr export handoff](../../flickr/HANDOFF.md)
+The Flickr importer turns a Flickr account data export into a private Minnelux library. The owner can add metadata and media ZIPs in any order, preview the proposed changes, and resume from another authorized browser. Minnelux keeps the original bytes and relevant source JSON. Flickr albums become Minnelux tags, so one original can appear in multiple collections. [Minnelux PRD](../../prod/minnelux-prd.md) · [Flickr export format](EXPORT-FORMAT.md)
 
 ## Import contract
 
@@ -69,7 +69,7 @@ The versioned [importer and library repository contract](REPOSITORY-CONTRACT.md)
 | --- | --- |
 | Import UI | Selects local ZIPs and a source account, displays the preview, supports review or deferral, and shows progress and failures. |
 | ZIP reader in an import worker | Enumerates members from browser `File` objects, reads relevant JSON by member, and opens originals on demand for signatures, verification, previews, and upload. |
-| Flickr reconciliation | Consumes the parsed parts and previously published source state. Resolves source identity, computes preview states, maps metadata and tags, and returns proposed catalog and import-state changes. The spike is the starting point for this logic. [Reconciliation spike](../../../spikes/flickr/README.md) |
+| Flickr reconciliation | Consumes the parsed parts and previously published source state. Resolves source identity, computes preview states, maps metadata and tags, and returns proposed catalog and import-state changes. [Importer planner](../../../apps/flickr-import/plan.mjs) |
 | Preview and indexing workers | Generate thumbnails and video posters for browser-decodable originals. Build text postings from filenames, titles, and descriptions and tag postings from membership. Include imported tag names in search through the tag dictionary. |
 | Library repository and storage adapter | Manage object references, private reads and writes, immutable snapshot creation, and conditional publication. The importer uses the provider-neutral repository interface. |
 
@@ -107,7 +107,7 @@ The hosted Chrome proof has exercised Google Identity Services, private reads, w
 
 ## Compatibility evidence and code reuse
 
-On November 18, 2026, local ZIP enumeration and JSON parsing found 9,985 valid photo sidecars and 500 JPEGs. All 500 matched by Flickr ID. There were 9,485 sidecars awaiting media. The 500 joined JPEGs had 529 memberships across 16 albums, with 22 items appearing in multiple albums. Across all IDs with sidecars, the album document listed 14,424 memberships and the sidecars listed 12,311. The supplied media ZIP had no video. All 500 EXIF `DateTimeOriginal` values agreed with the Flickr capture wall time, and those JPEGs had no embedded original-time offset. In the 9,985 sidecars, 590 descriptions contained HTML-like markup and 367 records had nonempty `geo`. The joined JPEGs had no populated sidecar `geo` to compare with embedded GPS. [Sample archives and format observations](../../flickr/HANDOFF.md)
+The [Flickr export format reference](EXPORT-FORMAT.md) describes the sample archives used for these comparisons.
 
 | Implementation checked | Result on the sample | Design guidance |
 | --- | --- | --- |
@@ -115,5 +115,3 @@ On November 18, 2026, local ZIP enumeration and JSON parsing found 9,985 valid p
 | immich-go Flickr adapter, open PR #1355 at the time of the check | The extracted Go classifier, ID matcher, JSON structs, and album index decoded 9,985 sidecars and found 500 matches and 529 memberships. The classifier rejected a media-only invocation. The adapter maps albums by title and omits sidecar GPS. | Use its two-pass ZIP scan as a reference. Keep account-scoped identity, persistent partial state, and Flickr geography in the browser implementation. [Adapter PR](https://github.com/simulot/immich-go/pull/1355) · [Metadata mapping](https://github.com/jmcauley/immich-go/blob/add-flickr-adapter/adapters/flickr/json.go) |
 | Memento Mori | Its local ZIP index matched all 500 given the full sidecar ID set. Of those, 497 pass its public-only filter. Its geo helper decoded 367 populated records and rounded coordinates to five decimals. Of the six sample photos with Flickr rotation of 90°, one also had EXIF Orientation 6 and five had Orientation 1. | Use the on-demand ZIP and legacy filename handling as references. Test its EXIF-first rotation rule against the fixture, and preserve private items and coordinate precision. [ZIP index](https://github.com/antimega/memento-mori/blob/main/memento_mori/flickr.py#L288-L350) · [Rotation handling](https://github.com/antimega/memento-mori/blob/main/memento_mori/flickr.py#L896-L920) |
 | Flickr to iCloud | The unmodified Ruby verifier matched all 500, reported 9,485 sidecars awaiting media, and found 22 byte-identical pairs across 44 distinct Flickr IDs. Its downstream preparation merges by digest. | Adapt the verifier’s ID and duplicate checks as acceptance cases. Retain both Flickr identities when byte payloads coincide. [Verifier](https://github.com/gwcoffey/flickr-to-icloud/blob/main/src/ruby/verify.rb) · [Preparation code](https://github.com/gwcoffey/flickr-to-icloud/blob/main/src/ruby/prepare.rb) |
-
-The Minnelux investigation fed parsed ZIP entries into the reconciliation spike. It produced 500 assets and 529 album memberships in both arrival orders and on replay. Its preview grouped 9,485 genuine metadata-only items with 16,794 album-only references, including the `0` placeholder, under a single 26,279 total. Implement the preview states above and keep the raw references. The spike demonstrates the merge logic. Browser ZIP extraction, durable integrated publication, and rendering the combined orientation still require the acceptance checks above. [Reconciliation source](../../../spikes/flickr/reconcile.mjs)
