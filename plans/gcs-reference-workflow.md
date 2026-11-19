@@ -45,7 +45,7 @@ Covers the first path through R1, R2, R4, R5, and R8. Use a minimal static test 
 
 ### Task 2 · GCS storage and browser proof
 
-**Owner** Storage agent. Own `src/storage/` implementations and tests plus GCS proof changes under `spikes/gcs/`. Start hosted proof reproduction while Task 1 is in progress. Start adapter implementation from its contract commit.
+**Owner** Storage agent. Own `src/storage/` implementations and tests. Use the hosted probe to reproduce the [GCS validation checks](../docs/dev/storage/SPEC.md#google-cloud-storage) while Task 1 is in progress. Start adapter implementation from its contract commit.
 
 - [ ] Implement the GIS session and GCS store. Exercise missing versus denied, create-only collisions, stale writes, opaque cursors, private full reads, and valid versus unexpected range responses. Extend the Flickr prototype's generation-pinned pattern for the head.
 - [ ] Force a replacement between the metadata and body reads. Assert a coherent bytes/token pair or a surfaced race. Force a late response after expiry, disconnect, and switch. Assert private state stays cleared.

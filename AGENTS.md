@@ -18,7 +18,7 @@ Check `git status --short --branch` and compare `HEAD` with `origin/main` before
 | UI and library worker integration | [Worker message types](apps/web/src/library/worker-contract.ts) |
 | Storage adapters, catalog, and publication | [Storage spec](docs/dev/storage/SPEC.md) and [adapter types](apps/web/src/storage/contract.ts) |
 | Flickr ZIPs and catalog conversion | [Importer guide](apps/flickr-import/README.md), [importer spec](docs/dev/flickr-import/SPEC.md), and [repository contract](docs/dev/flickr-import/REPOSITORY-CONTRACT.md) |
-| Provider behavior and live checks | [GCS browser proof](spikes/gcs/README.md), [S3 browser proof](spikes/s3/README.md), and [S3 owner setup](docs/prod/connect-amazon-s3.md) |
+| Provider behavior and live checks | [Storage validation](docs/dev/storage/SPEC.md#provider-validation) and [provider setup](docs/prod/minnelux-prd.md#storage-providers-and-authentication) |
 
 The client runs on static HTTPS and accesses the library owner's private bucket directly. Keep provider behavior inside adapters. **Remember login** saves one short-lived Google Cloud Storage login in browser IndexedDB when the user opts in. [Web client setup](apps/web/README.md#stay-connected-across-reloads)
 
@@ -31,4 +31,4 @@ Preserve original bytes and publish revisions by conditionally updating the libr
 
 ## Firebase Hosting
 
-Use the [Firebase Hosting runbook](spikes/gcs/README.md#redeploy). Identify the commit, Firebase site, and target path before publishing. Firebase replaces the full site's file set. Preserve the probe at `/`, the importer at `/flickr-import/`, and the static client at `/web/` when it is hosted on the same site, including the headers each route needs. For a web release, stage the regular `apps/web/dist/` build under `/web/`. After publishing, verify all staged routes and follow the runbook's rollback procedure if a route regresses.
+Use the [Firebase Hosting runbook](docs/dev/firebase-hosting.md) to stage all routes, verify the release, and roll back if a route regresses.

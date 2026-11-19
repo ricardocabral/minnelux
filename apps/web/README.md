@@ -20,7 +20,7 @@ From `apps/web`, run `npm ci` and `npm run build` with Node.js 24 or later. Serv
 
 For Google sign-in, allow Google Identity Services scripts, styles, and frames from `https://accounts.google.com/gsi/`. Allow connections to that path, `https://openidconnect.googleapis.com`, and `https://storage.googleapis.com`. Allow same-origin workers and blob images. Set `Cross-Origin-Opener-Policy: same-origin-allow-popups` for sign-in.
 
-Open your deployed URL, connect using a private test bucket, and verify that you can open a photo. [Project Firebase Hosting runbook](../../spikes/gcs/README.md#redeploy)
+Open your deployed URL, connect using a private test bucket, and verify that you can open a photo. [Project Firebase Hosting runbook](../../docs/dev/firebase-hosting.md)
 
 ## Stay connected across reloads
 
