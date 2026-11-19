@@ -246,6 +246,7 @@ export function createS3Store(
       const signal = requestSignal(callerSignal)
       let observed
       try {
+        // One GET keeps the head bytes and its quoted ETag on the same revision.
         observed = await get(key, signal)
       } catch (error) {
         if (record(error) && error.code === 'missing') return null

@@ -1,15 +1,6 @@
 # Minnelux storage and indexing
 
-The GCS reference workflow publishes one photo with two tags and finds it from a freshly authorized browser using the stored index. The same revision is the unit of publication, browse, and search. GCS is the first implementation of a small object-storage interface. The S3 proof is the second reference for its semantics. [Product requirements](../../prod/minnelux-prd.md) · [Implementation plan](../../../plans/gcs-reference-workflow.md)
-
-## Evidence and decisions
-
-| Evidence | Design decision |
-| --- | --- |
-| The deployed GCS probe demonstrated GIS sign-in, private reads, viewer write denial, stale-head rejection, and range seeking in Chrome. Desktop and mobile Safari, actual token expiry, and a signed-in account without bucket IAM remain open. | Keep browser-to-provider requests on a static HTTPS deployment. Close the open GCS proof cases and follow the PRD’s provider feasibility gate for full UI implementation. [GCS proof](../../../spikes/gcs/README.md#hosted-chrome-results) |
-| The S3 proof exercised quoted ETags, pagination, and conditional writes. Its direct presigned video URL could be replayed from another browser context. | Use native conditions behind opaque tokens and a tab-bound video route over authenticated range reads. [S3 connector handoff](../../../spikes/s3/README.md#connector-handoff) |
-| The standalone Flickr importer writes v1 catalogs, postings, and source state under one head. Its GCS adapter can read bytes pinned to the generation it observed. | Read v1 libraries and put Flickr imports and ordinary edits through the same publication logic. Generate the compatibility fixture with the importer writer. [Flickr repository contract](../flickr-import/REPOSITORY-CONTRACT.md) |
-| The 50,000-item snapshot spike exercised whole gzip snapshots and compared search with a catalog scan on a modeled loopback connection. It excluded thumbnails, real GCS, and the target mobile device. | Start with whole snapshots. Use mobile measurements to decide whether paging or sharding pays for its complexity. [Snapshot benchmark](../../../spikes/snapshots/README.md#measurements) |
+The GCS reference workflow publishes one photo with two tags and finds it from a freshly authorized browser using the stored index. The same revision is the unit of publication, browse, and search. The GCS and S3 adapters implement the same object-storage interface. [Product requirements](../../prod/minnelux-prd.md) · [Implementation plan](../../../plans/gcs-reference-workflow.md)
 
 ## Storage interface
 
@@ -133,3 +124,34 @@ type QueryResult = { ids: string[]; total: number }
 Use synthetic private data for contract tests and hosted checks. Record test origin, provider, browser and device, timestamp, fixture and sample size, and observed requests/statuses. Test absence versus denial, creates and stale updates, interrupted writes, stale worker replies, out-of-root access, tab isolation, read-only access, and repair after invalid or missing postings.
 
 Measure the 50,000-item workload on a midrange phone with real private GCS at 20 Mbps and 80 ms RTT. Report p95 to visible thumbnails within 3 s, cold text query within 1 s once the catalog is ready, and warm query within 250 ms. Record peak working memory, transferred bytes, request counts, and build, compression, and publication timings separately. Verify migration preserves asset IDs, tags, and search once another provider passes its own contract and security checks. [PRD release criteria](../../prod/minnelux-prd.md#6-release-validation-and-implementation-order)
+
+### Provider validation
+
+#### Google Cloud Storage
+
+On November 18, 2026 at 12:02–12:10 BRT, Chrome 157 on the hosted HTTPS probe completed one Google Identity Services editor run and one viewer run against private GCS. The editor decoded a private JPEG, wrote two snapshots, and created and updated the head with HTTP 200. A stale generation returned 412 and an independent read confirmed the head still named the newer revision. The viewer decoded the JPEG with the read-only scope and received 403 on publication. A signed-out JSON API read in a separate Chromium check returned 401.
+
+In one hosted playback run, the service worker received readable `206` range responses and resumed at 72 seconds after streaming 7,123,755 of 27,745,984 bytes. A separate loopback run against GCS denied replay from a second tab. Local sign-out and a fresh Google sign-in restored the position in the hosted probe. Release checks still cover actual provider token expiry, a signed-in account without bucket IAM, and seeking on desktop and mobile Safari. The fixture was a synthetic fast-start H.264 MP4 stored without content encoding. [Hosted test evidence and reproduction steps](https://github.com/ricardocabral/minnelux/blob/2c48c2aee643ef2e0f558ad9029a65b1b04065fb/spikes/gcs/README.md#hosted-chrome-results)
+
+#### Amazon S3
+
+The November 18, 2026 Cognito and private S3 proof recorded successful editor and viewer reads and 403 responses for anonymous or unassigned reads and viewer writes. The configured origin could read ETag and range headers. The editor listed two fixtures over two pages and received 403 for bucket-wide listing and an out-of-prefix read. Conditional writes returned 200. Duplicate creates and a stale quoted ETag returned 412, and an independent read confirmed the head still named the newer revision.
+
+Two Chrome 157 runs sought to 72 seconds before the synthetic 27,745,984-byte object finished downloading and received a new `206` after the seek. A signed-out context replayed the presigned playback URL after local disconnect. An expired test URL returned 403 and a replacement returned 206. This establishes URL expiry behavior. Verify AWS credential expiry and revocation separately, and test that the app's planned tab-bound route denies replay of its exact playback URL. [Browser proof and reproduction steps](https://github.com/ricardocabral/minnelux/blob/b3d0b33e3164c34d5b3bb5535dd3203552e3d1c6/spikes/s3/README.md) · [S3 setup and CORS](../../prod/connect-amazon-s3.md#configure-browser-access)
+
+### Whole-snapshot measurements
+
+The November 18, 2026 runs at 13:07 and 13:10 BRT used Chrome 157 headless on a macOS desktop, a modeled 20 Mbps per direction and 80 ms per request on loopback, and 40 samples per stage and profile. Each profile generated 50,000 assets with the same seed and tag memberships. The higher-vocabulary profile had 24,618 normalized title and description terms compared with 98 in the baseline, excluding titles equal to filenames. The browser worker built the postings, gzipped and hashed the three snapshots, then uploaded those snapshots, the manifest, and the head.
+
+| Stage | Baseline p95 | Higher-vocabulary p95 |
+| --- | ---: | ---: |
+| Build text and tag postings | 152.5 ms | 191.2 ms |
+| Serialize, gzip, and hash snapshots | 343.7 ms | 351.4 ms |
+| Upload snapshots, manifest, and head | 1,851.7 ms | 1,956.0 ms |
+| Reopen and order the first 48 asset records | 1,495.0 ms | 1,599.4 ms |
+| Cold text query with catalog ready | 603.2 ms | 645.3 ms |
+| Warm text query | 7.5 ms | 7.0 ms |
+
+All 80 reopens returned the expected revision and first page. Each of the 80 cold and 80 warm queries matched a direct catalog scan on result count and first-page order. The reopen transferred 2,732,730 to 2,889,422 payload bytes across three reads. Cold search transferred 1,248,128 to 1,357,606 bytes across two reads. Warm search reused the loaded postings.
+
+These results support using whole gzip snapshots for the GCS reference workflow. The reopen clock stopped after ordering catalog records, before fetching or rendering thumbnails. Use the release measurements on real GCS and a midrange phone, including peak memory, to decide whether paging or sharding is worthwhile. [Workload, raw stages, and benchmark source](https://github.com/ricardocabral/minnelux/blob/2c48c2aee643ef2e0f558ad9029a65b1b04065fb/spikes/snapshots/README.md#measurements)

@@ -43,4 +43,4 @@ The command prints a temporary directory with two metadata ZIPs and two media ZI
 
 On the deployed page, sign in to a test bucket with an unused prefix. Select the ZIPs from the printed directory, then preview, publish, and reopen the import.
 
-[Project Firebase Hosting runbook](../../spikes/gcs/README.md#redeploy) · [Flickr export format](../../docs/dev/flickr-import/EXPORT-FORMAT.md) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)
+[Project Firebase Hosting runbook](../../docs/dev/firebase-hosting.md) · [Flickr export format](../../docs/dev/flickr-import/EXPORT-FORMAT.md) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)

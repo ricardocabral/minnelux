@@ -227,6 +227,7 @@ export function createGcsStore(
         }
         if (stat.byteLength > maxBytes) throw storeError('limit')
         const url = objectUrl(key, true)
+        // Pin the media read to the generation that supplied the write token.
         url.search = new URLSearchParams({alt: 'media', generation: stat.observedVersion}).toString()
         const response = await send(url, signal)
         if (response.status === 404 && attempt === 0) {
