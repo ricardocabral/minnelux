@@ -7,8 +7,6 @@ flowchart LR
     Host["Static HTTPS host"] -->|App files| Browser["Browser"]
     Browser <-->|Sign-in| Identity["Identity provider"]
     Browser -->|Library reads and writes| Adapter["Storage adapter"]
-    Browser <-->|Private video| Relay["Tab-bound video route"]
-    Relay -->|Authenticated ranges| Adapter
     Adapter <--> Storage["Private object storage"]
 ```
 
@@ -16,7 +14,7 @@ The HTTPS host serves the app files. Signing in gives the browser short-lived cr
 
 With **Remember login** selected, the web client saves a short-lived Google Cloud Storage token and its library connection in the browser's IndexedDB. Reloading the same site in the same browser profile can reopen the library while the token is valid. A new Google token requires another sign-in action. [Remember a Google Cloud Storage login](../../apps/web/README.md#stay-connected-across-reloads)
 
-The diagram includes the planned private video route. It binds playback to the tab that opened the video and requests byte ranges so the player can seek. [GCS validation evidence](../dev/storage/SPEC.md#google-cloud-storage) · [Current viewer support](library-compatibility.md#library-formats)
+For imported videos, the web client displays saved previews and details. Use the Flickr importer to download the original video. [Current viewer support](library-compatibility.md#library-formats)
 
 ## What the library stores
 

@@ -6,8 +6,8 @@ For large unattended batches, use the [Flickr importer CLI](../../docs/prod/impo
 
 ## Import a Flickr export
 
-1. Request an account export from Flickr and keep the ZIP parts together. Set up your bucket, Google account permissions, and OAuth client. [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md)
-2. Open the [hosted Flickr importer](https://minnelux.web.app/flickr-import/). Enter the bucket name, library prefix, and Google OAuth web client ID, then choose **Sign in to import**.
+1. Request an account export from Flickr and keep the ZIP parts together. Deploy the importer and set up your bucket, Google account permissions, and OAuth client. [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md)
+2. Open your deployed Flickr importer. Enter the bucket name, library prefix, and Google OAuth web client ID, then choose **Sign in to import**.
 3. Choose **New Flickr source** for the first import. Select that same source when adding more parts or updating an earlier import. Select one or more ZIPs.
 4. Choose **Preview import** and review proposed matches. Resolve ambiguous matches you recognize. Choose **Publish import** and wait for confirmation.
 
@@ -31,6 +31,8 @@ npm run build
 
 Serve `dist/` from a dedicated HTTPS origin. Register that origin on the [Google OAuth client](../../docs/prod/connect-google-cloud-storage.md#prepare-storage-and-sign-in). The built page's Content Security Policy allows Google Identity Services, the Security Token Service, and the Cloud Storage JSON API. Apply the app's [security requirements](../../docs/prod/minnelux-prd.md#security-requirements), including the HTTP response headers `Content-Security-Policy: frame-ancestors 'none'` and `X-Content-Type-Options: nosniff`.
 
+Follow the deployment steps for [Firebase Hosting](../../docs/prod/connect-google-cloud-storage.md#deploy-to-firebase-hosting) or [Cloud Storage](../../docs/prod/connect-google-cloud-storage.md#deploy-to-cloud-storage).
+
 ## Verify with a synthetic export
 
 Install `zip` and run this command from the repository root.
@@ -43,4 +45,4 @@ The command prints a temporary directory with two metadata ZIPs and two media ZI
 
 On the deployed page, sign in to a test bucket with an unused prefix. Select the ZIPs from the printed directory, then preview, publish, and reopen the import.
 
-[Project Firebase Hosting runbook](../../docs/dev/firebase-hosting.md) · [Flickr export format](../../docs/dev/flickr-import/EXPORT-FORMAT.md) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)
+[Flickr export format](../../docs/dev/flickr-import/EXPORT-FORMAT.md) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)
