@@ -22,7 +22,7 @@ Check `git status --short --branch` and compare `HEAD` with `origin/main` before
 
 The client runs on static HTTPS and accesses the library owner's private bucket directly. Keep provider behavior inside adapters. **Remember login** saves one short-lived Google Cloud Storage login in browser IndexedDB when the user opts in. [Web client setup](apps/web/README.md#stay-connected-across-reloads)
 
-Preserve original bytes and publish revisions by conditionally updating the library head. The standalone Flickr importer runs in a browser and generates supported previews locally. The web client reads Flickr v1 revisions and writes v2 manifests. Preserve source metadata and media references through edits and upgrades.
+Preserve original bytes and publish revisions by conditionally updating the library head. The Flickr importer has browser and command-line entry points that generate supported previews locally. The web client reads Flickr v1 revisions and writes v2 manifests. Preserve source metadata and media references through edits and upgrades. [CLI workflow](docs/prod/import-flickr-cli.md)
 
 ## Verify the affected path
 

@@ -346,3 +346,25 @@ test('passes the head byte limit to storage and refuses an oversized head from a
   };
   await assert.rejects(createFlickrRepository(store).listFlickrSources(), {code:'corrupt'});
 });
+
+test('releases staged originals after verifying an immutable collision and after cancelling a read', async () => {
+  const store = memoryStore();
+  const repository = createFlickrRepository(store);
+  const base = await repository.readFlickrImport(sourceKey);
+  const importPlan = completePlan(base);
+  const key = 'library/originals/' + hash(original);
+  // Simulate an original left behind before the previous process could publish a head.
+  await store.put(key, new Blob([original]), {match:'0'});
+  const get = store.get.bind(store);
+  let released = 0;
+  store.get = async name => {
+    const object = await get(name);
+    return name === key && object ? {...object, dispose: async () => { released++; }} : object;
+  };
+  assert.equal((await repository.publishFlickrImport(importPlan)).status, 'published');
+  assert.equal(released, 1);
+  const published = await repository.readFlickrImport(sourceKey);
+  const stream = await repository.openImportObject(published.baseToken, published.assets[0].original);
+  await stream.cancel();
+  assert.equal(released, 2);
+});

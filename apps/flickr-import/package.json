@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test *.test.mjs",
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "import:flickr": "node cli.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

@@ -98,3 +98,96 @@ test('cancels the media stream when it exceeds the observed size', async () => {
   assert.equal(cancelled, true)
   assert.ok(reads < 20)
 })
+
+test('resumes a conditional large upload from the byte offset GCS reports', async () => {
+  const body = new Blob([new Uint8Array(17 * 1024 ** 2)], { type: 'image/jpeg' })
+  const ranges = []
+  const store = createGcsStore('minnelux-test', async () => 'fixture-token', {
+    resumable: true,
+    fetch: async (url, request) => {
+      if (request.method === 'POST') {
+        assert.equal(url.searchParams.get('uploadType'), 'resumable')
+        assert.equal(url.searchParams.get('ifGenerationMatch'), '0')
+        assert.deepEqual(JSON.parse(request.body), { name: 'library/large.jpg', contentType: 'image/jpeg' })
+        return new Response(null, { headers: { location: 'https://storage.googleapis.com/upload/session?upload_id=fixture' } })
+      }
+      assert.equal(request.method, 'PUT')
+      assert.equal(new URL(url).origin, 'https://storage.googleapis.com')
+      const range = new Headers(request.headers).get('Content-Range')
+      ranges.push(range)
+      if (ranges.length === 1) throw new TypeError('Interrupted upload')
+      if (ranges.length < 4) {
+        return new Response(null, { status: 308, headers: {
+          range: ranges.length === 2 ? 'bytes=0-4194303' : 'bytes=0-12582911',
+        } })
+      }
+      return Response.json({ generation: '12345' })
+    },
+  })
+  assert.deepEqual(await store.put('library/large.jpg', body, { match: '0' }), { generation: '12345' })
+  assert.deepEqual(ranges, [
+    'bytes 0-8388607/17825792', 'bytes */17825792',
+    'bytes 4194304-12582911/17825792', 'bytes 12582912-17825791/17825792',
+  ])
+})
+
+test('can stage a large verified response on disk and release it after the read', async t => {
+  const { createWriteStream, openAsBlob } = await import('node:fs')
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { Readable } = await import('node:stream')
+  const { pipeline } = await import('node:stream/promises')
+  const directory = await mkdtemp(join(tmpdir(), 'minnelux-gcs-fixture-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const path = join(directory, 'object')
+  const size = 17 * 1024 ** 2
+  let remaining = size
+  const store = createGcsStore('minnelux-test', () => 'synthetic', {
+    fetch: async url => {
+      if (!url.searchParams.has('alt')) return Response.json({ generation: '9', size: String(size) })
+      return new Response(new ReadableStream({
+        pull(controller) {
+          if (!remaining) return controller.close()
+          const chunk = new Uint8Array(Math.min(remaining, 1024 ** 2)).fill(42)
+          remaining -= chunk.length
+          controller.enqueue(chunk)
+        },
+      }), { headers: { 'Content-Type': 'application/octet-stream' } })
+    },
+  })
+  const object = await store.get('library/originals/fixture', {
+    maxBytes: size,
+    stageBody: async (bytes, type) => {
+      await pipeline(Readable.fromWeb(bytes), createWriteStream(path))
+      return { body: await openAsBlob(path, { type }), dispose: () => rm(path) }
+    },
+  })
+  assert.equal(object.generation, '9')
+  assert.equal(object.body.size, size)
+  assert.deepEqual(await object.body.slice(-2).bytes(), new Uint8Array([42, 42]))
+  await object.dispose()
+})
+
+test('rejects resume status beyond any attempted upload bytes', async () => {
+  const body = new Blob([new Uint8Array(17 * 1024 ** 2)])
+  for (const [status, message] of [
+    [new Response(null, { status: 308, headers: { range: 'bytes=0-9000000' } }), /invalid upload offset/],
+    [Response.json({ generation: '3' }), /before the final chunk/],
+  ]) {
+    let calls = 0
+    const store = createGcsStore('minnelux-test', () => 'synthetic', {
+      resumable: true,
+      fetch: async (url, request) => {
+        if (request.method === 'POST') {
+          return new Response(null, { headers: { location: 'https://storage.googleapis.com/upload/session' } })
+        }
+        if (++calls === 1) throw new TypeError('Interrupted first chunk')
+        assert.equal(new Headers(request.headers).get('Content-Range'), 'bytes */17825792')
+        return status
+      },
+    })
+    await assert.rejects(store.put('library/originals/fixture', body, { match: '0' }), message)
+    assert.equal(calls, 2)
+  }
+})
