@@ -47,14 +47,16 @@ Complete sign-in in your browser. [Google Cloud Storage setup](connect-google-cl
 ## Set up on Google Cloud
 
 Fill in the project, bucket, library prefix, and account placeholders before
-pasting. Use your existing HTTPS app URL or specify the Firebase Hosting site
-you want the agent to use. [Minnelux GCS setup](connect-google-cloud-storage.md) · [Firebase Hosting targets](https://firebase.google.com/docs/hosting/multisites)
+pasting. Use your existing HTTPS app URL or specify a hosting target you control.
+For Firebase Hosting, give the project ID for a dedicated default Hosting site.
+For Cloud Storage hosting, give the static site bucket and HTTPS domain.
+[Firebase Hosting setup](connect-google-cloud-storage.md#deploy-to-firebase-hosting) · [Cloud Storage hosting setup](connect-google-cloud-storage.md#deploy-to-cloud-storage)
 
 ```text
 Set up Minnelux with Google Cloud Storage in project <GCP_PROJECT_ID>,
 using location <GCS_LOCATION>, bucket <GCS_BUCKET> and library prefix
-<LIBRARY_PREFIX>. Use <APP_URL_OR_FIREBASE_HOSTING_SITE> to serve the web
-client. My Google viewer accounts are <VIEWER_ACCOUNTS> and editor
+<LIBRARY_PREFIX>. Use <APP_URL_OR_HOSTING_TARGET> to serve the web client.
+My Google viewer accounts are <VIEWER_ACCOUNTS> and editor
 accounts are <EDITOR_ACCOUNTS>. Confirm the active project and intended
 resources before changing them. Reuse resources that already match.
 
@@ -66,10 +68,11 @@ resources before changing them. Reuse resources that already match.
    storage.objects.delete only on the exact <LIBRARY_PREFIX>/head.json
    object so editors can advance the head.
    Check inherited access before relying on the viewer/editor split.
-3. If deploying the app, build the regular apps/web/dist/ using Node.js 24
-   or later and serve the static files over HTTPS with the documented
-   security headers. On Firebase Hosting, verify the project and site
-   targeted by the deploy and preserve other routes on a shared site.
+3. If deploying the app, follow the GCS guide's build and deployment
+   steps for my hosting target. Serve the regular apps/web/dist/ over
+   HTTPS with the documented security headers. Confirm the dedicated
+   Firebase Hosting site or the separate Cloud Storage site bucket and
+   HTTPS domain before deploying.
 4. Configure the consent screen in Google Auth Platform and create or
    reuse a Web application OAuth client. For an External app in Testing,
    add the intended accounts as test users. Register the exact app origin

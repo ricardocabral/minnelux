@@ -28,7 +28,7 @@ The app runs entirely in your browser. Self-hosting requires only static HTTPS f
 
 - [Set up Minnelux with a coding agent](docs/prod/agent-cookbook.md)
 - [Run or self-host the web client](apps/web/README.md)
-- [Connect Google Cloud Storage with Google sign-in](docs/prod/connect-google-cloud-storage.md)
+- [Self-host Minnelux and connect a private Google Cloud Storage library](docs/prod/connect-google-cloud-storage.md)
 - [Connect Amazon S3 with Cognito](docs/prod/connect-amazon-s3.md)
 - [Remember a Google Cloud Storage login](apps/web/README.md#stay-connected-across-reloads)
 - [Import or browse a Flickr account export in the browser](apps/flickr-import/README.md)
