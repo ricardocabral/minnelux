@@ -58,7 +58,7 @@ async function openGoogleForm(page: Page) {
 async function connectGoogle(page: Page) {
   const connect = page.getByRole('button', { name: 'Connect to Google Cloud Storage' })
   await connect.click()
-  await expect(page.getByRole('status')).toHaveText('Google sign-in is ready. Select Connect again.')
+  await expect(page.getByRole('status')).toHaveText('Google sign-in is ready. Click Connect again')
   await connect.click()
   await expect(page.getByRole('button', { name: 'Open Forêt', exact: true }).locator('img')).toHaveAttribute('src', /^blob:/)
 }
