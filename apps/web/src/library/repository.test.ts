@@ -55,7 +55,7 @@ function memoryStore() {
 }
 
 const headKey = 'library/head.json'
-const jpeg = await readFile(new URL('../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url))
+const jpeg = await readFile(new URL('../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url))
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
 async function fixtureStore() {

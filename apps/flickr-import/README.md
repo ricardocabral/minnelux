@@ -29,6 +29,16 @@ npm run build
 
 Serve `dist/` from a dedicated HTTPS origin. Register that origin on the [Google OAuth client](../../docs/prod/connect-google-cloud-storage.md#prepare-storage-and-sign-in). The built page's Content Security Policy allows Google Identity Services, the Security Token Service, and the Cloud Storage JSON API. Apply the app's [security requirements](../../docs/prod/minnelux-prd.md#security-requirements), including the HTTP response headers `Content-Security-Policy: frame-ancestors 'none'` and `X-Content-Type-Options: nosniff`.
 
-Open the deployed page, sign in to a test bucket and unused prefix, and verify that you can preview, publish, and reopen a synthetic export. From the repository root, run `node spikes/flickr/pack-fixture.mjs` with `zip` installed, then select the ZIPs in the printed directory.
+## Verify with a synthetic export
 
-[Project Firebase Hosting runbook](../../spikes/gcs/README.md#redeploy) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)
+Install `zip` and run this command from the repository root.
+
+```sh
+node apps/flickr-import/test-fixtures/pack-fixture.mjs
+```
+
+The command prints a temporary directory with two metadata ZIPs and two media ZIPs. The media includes an EXIF Orientation 6 JPEG and an H.264 MP4 with a `.jpg` export name to check file signature detection. Both originals were generated from FFmpeg's `testsrc2`. The metadata includes overlapping album memberships, a sidecar without an original, a description with markup, and coordinates in microdegrees.
+
+On the deployed page, sign in to a test bucket with an unused prefix. Select the ZIPs from the printed directory, then preview, publish, and reopen the import.
+
+[Project Firebase Hosting runbook](../../spikes/gcs/README.md#redeploy) · [Flickr export format](../../docs/dev/flickr-import/EXPORT-FORMAT.md) · [Importer specification](../../docs/dev/flickr-import/SPEC.md) · [Repository contract](../../docs/dev/flickr-import/REPOSITORY-CONTRACT.md)

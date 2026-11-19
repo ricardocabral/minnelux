@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { metadataFirst, metadataLater, originalParts } from "./fixture.mjs";
 
-const photo = await readFile(new URL("./fixtures/photo.jpg", import.meta.url));
-const video = await readFile(new URL("./fixtures/video.mp4", import.meta.url));
+const photo = await readFile(new URL("./photo.jpg", import.meta.url));
+const video = await readFile(new URL("./video.mp4", import.meta.url));
 const output = await mkdtemp(join(resolve(process.argv[2] ?? tmpdir()), "minnelux-flickr-"));
 const entries = [
   [metadataFirst.id, metadataFirst.sidecars.map(({ name, json }) => [name, JSON.stringify(json)])],

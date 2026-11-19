@@ -8,8 +8,8 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const catalogId = (kind, value) => "flickr:" + hash(JSON.stringify(["family", kind, value]));
 const binding = { sourceKey: "family", label: "Family" };
 const empty = { version: 1, sourceKey: "family", revisionId: null, baseToken: "pin", source: null, assets: [], tags: [], receipts: [] };
-const photo = await readFile(new URL("../../spikes/flickr/fixtures/photo.jpg", import.meta.url));
-const movie = await readFile(new URL("../../spikes/flickr/fixtures/video.mp4", import.meta.url));
+const photo = await readFile(new URL("./test-fixtures/photo.jpg", import.meta.url));
+const movie = await readFile(new URL("./test-fixtures/video.mp4", import.meta.url));
 const digits = "90071992547409931";
 
 const original = (id, bytes = photo, filename = "river_" + id + "_o.jpg") =>

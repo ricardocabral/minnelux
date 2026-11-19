@@ -4,7 +4,7 @@ import {createFlickrRepository} from '../../../../flickr-import/repository.mjs'
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 const part = sha('synthetic archive')
-const jpeg = await readFile(new URL('../../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url))
+const jpeg = await readFile(new URL('../../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url))
 const identity = (sourceKey, kind, value) => 'flickr:' + sha(JSON.stringify([sourceKey, kind, value]))
 const upload = (uploadId, kind, bytes) => ({
   uploadId, kind, mimeType: 'image/jpeg', byteLength: bytes.length, sha256: sha(bytes),

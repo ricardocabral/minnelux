@@ -92,7 +92,7 @@ test('downloads the stored photo original from the viewer footer', async ({ page
   expect(originalReads).toBe(2)
   expect(download.suggestedFilename()).toBe('source.jpg')
   expect(await readFile(await download.path())).toEqual(await readFile(
-    new URL('../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url),
+    new URL('../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url),
   ))
   await expect(footer.getByRole('alert')).toHaveCount(0)
 })
@@ -257,7 +257,7 @@ test('warns before reimporting when the session expires after a possibly committ
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Import media' })
   await dialog.getByLabel('JPEG photo').setInputFiles(fileURLToPath(
-    new URL('../../../../spikes/flickr/fixtures/photo.jpg', import.meta.url),
+    new URL('../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url),
   ))
   await dialog.getByRole('textbox', { name: 'First tag' }).fill('Expiry')
   await dialog.getByRole('textbox', { name: 'Second tag' }).fill('Proof')

@@ -13,7 +13,7 @@ const catalogId = (kind, value) => 'flickr:' + hash(JSON.stringify([sourceKey, k
 const photoId = '9007199254740993';
 const tagId = catalogId('album', '001');
 const assetId = catalogId('asset', photoId);
-const original = await readFile(new URL('../../spikes/flickr/fixtures/photo.jpg', import.meta.url));
+const original = await readFile(new URL('./test-fixtures/photo.jpg', import.meta.url));
 const raw = Buffer.from(JSON.stringify({ id: photoId, title: 'Forêt' }, null, 2));
 
 function memoryStore() {
