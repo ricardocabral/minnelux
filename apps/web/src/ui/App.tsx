@@ -26,7 +26,7 @@ type AppProps = {
 
 type ConnectionFeedback = { text: string; role: 'status' | 'alert' }
 const connectionMessages = new Map<string, ConnectionFeedback>([
-  ['signInReady', { text: 'Google sign-in is ready. Select Connect again.', role: 'status' }],
+  ['signInReady', { text: 'Google sign-in is ready. Click Connect again', role: 'status' }],
   ['signInUnavailable', { text: 'Google sign-in could not load. Try again.', role: 'alert' }],
   ['popupBlocked', { text: 'Allow the Cognito sign-in pop-up and try again.', role: 'alert' }],
   ['signInTimeout', { text: 'Cognito sign-in timed out. Try again.', role: 'alert' }],

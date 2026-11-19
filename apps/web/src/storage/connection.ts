@@ -28,7 +28,7 @@ async function openGoogle(settings: GcsSettings & { bucket: string }, signal: Ab
     })
     await loadingGoogle
     signal.throwIfAborted()
-    throw Object.assign(new Error('Google sign-in is ready. Select Connect again.'), { code: 'signInReady' })
+    throw Object.assign(new Error('Google sign-in is ready. Click Connect again'), { code: 'signInReady' })
   }
   return authorizeGcsSession({
     oauth: google.accounts.oauth2,
