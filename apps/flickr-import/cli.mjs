@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { createWriteStream, openAsBlob } from 'node:fs'
+import { createWriteStream, openAsBlob, realpathSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,7 +8,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs, promisify } from 'node:util'
-import { createGcsStore } from './gcs.mjs'
+import { createGcsStore, downscopeGcsToken } from './gcs.mjs'
 import { readJpegMetadata } from './jpeg.mjs'
 import { prepareFlickrImport } from './plan.mjs'
 import { displayRotation, maxPreviewBytes, maxPreviewSize, previewImageTypes, readPreviewImage } from './preview.mjs'
@@ -26,7 +26,7 @@ Uses the configured Google Cloud CLI credentials. Requires ImageMagick for
 photo thumbnails. Use --no-thumbnails to import originals without previews.
 `
 
-async function stageUpload(bytes, type, signal) {
+async function stageLargeObject(bytes, type, signal) {
   const dir = await mkdtemp(join(tmpdir(), 'minnelux-flickr-'))
   const path = join(dir, 'upload')
   const dispose = () => rm(dir, { recursive: true, force: true })
@@ -77,10 +77,17 @@ export async function importArchives({
     signal?.throwIfAborted()
     const progress = event => onEvent({ zip: index + 1, ...event })
     progress({ total: files.length, phase: 'scanning' })
-    const part = await scanFlickrZip(await openAsBlob(file), { signal })
+    let part
+    try {
+      part = await scanFlickrZip(await openAsBlob(file), { signal })
+    } catch (error) {
+      signal?.throwIfAborted()
+      const code = /^[a-z0-9_-]+$/i.test(error?.code ?? '') ? error.code : 'unreadable'
+      throw new Error(`Could not read ZIP ${index + 1} (${code}).`)
+    }
     const directory = thumbnails ? await mkdtemp(join(tmpdir(), 'minnelux-flickr-previews-')) : undefined
     try {
-      const repository = createFlickrRepository(store, { prefix, stageUpload })
+      const repository = createFlickrRepository(store, { prefix, stageLargeObject })
       const base = await repository.readFlickrImport(sourceKey, signal)
       const { preview, plan } = await prepareFlickrImport(base, [part], {
         binding: { sourceKey, label },
@@ -118,16 +125,17 @@ export async function importArchives({
   return outcomes
 }
 
-function cloudStore(bucket, account) {
+function cloudStore(bucket, prefix, account, access) {
   let current
   let refreshAt = 0
   let pending
   async function getToken(signal) {
     if (current && Date.now() < refreshAt) return current
     pending ??= run('gcloud', ['auth', 'print-access-token', '--quiet', '--account=' + account], { signal, timeout: 60000 })
-      .then(({ stdout }) => {
-        current = stdout.trim()
-        if (!current || /\s/.test(current)) throw new Error('Google Cloud CLI returned an invalid access token')
+      .then(async ({ stdout }) => {
+        const sourceToken = stdout.trim()
+        if (!sourceToken || /\s/.test(sourceToken)) throw new Error('Google Cloud CLI returned an invalid access token')
+        current = await downscopeGcsToken(sourceToken, bucket, prefix, access, { fetch: request, signal })
         refreshAt = Date.now() + 5 * 60 * 1000
         return current
       })
@@ -176,8 +184,8 @@ async function main(args, signal) {
     }
   }
   if (!account || account === '(unset)') throw new Error('Select a Google Cloud CLI account before importing.')
-  const store = cloudStore(values.bucket, account)
   const prefix = values.prefix ?? 'library'
+  const store = cloudStore(values.bucket, prefix, account, listSources ? 'reader' : 'editor')
   if (listSources) {
     const sources = await createFlickrRepository(store, { prefix }).listFlickrSources(signal)
     console.log(JSON.stringify(sources.map(({ sourceKey, label }) => ({ sourceKey, label }))))
@@ -197,14 +205,18 @@ async function main(args, signal) {
   })
 }
 
-if (import.meta.main) {
+if (import.meta.main ?? (process.argv[1] && import.meta.filename === realpathSync(process.argv[1]))) {
   const stop = new AbortController()
   process.once('SIGINT', () => stop.abort())
   process.once('SIGTERM', () => stop.abort())
   try {
     await main(process.argv.slice(2), stop.signal)
   } catch (error) {
-    console.error(stop.signal.aborted ? 'Import interrupted. Rerun with the same source and ZIPs.' : error.message)
+    if (stop.signal.aborted) {
+      console.error('Import interrupted. Rerun with the same source and ZIPs.')
+    } else {
+      console.error(error?.path ? 'Import failed while accessing a local file.' : error.message)
+    }
     process.exitCode = stop.signal.aborted ? 130 : 1
   }
 }

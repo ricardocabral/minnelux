@@ -6,7 +6,7 @@ Use the Flickr importer CLI to publish a batch of Flickr account-export ZIPs to 
 
 1. Keep the original Flickr export ZIPs on disk. Leave temporary disk space for one large original and one ZIP's generated previews. [Per-ZIP and media limits](library-compatibility.md#import-limits)
 2. Choose an existing v1 library or an unused prefix in a private bucket. Give the Google Cloud CLI account permission to read library objects, create objects, and conditionally replace `head.json`. [Bucket and IAM setup](connect-google-cloud-storage.md#prepare-storage-and-sign-in) · [Compatible library formats](library-compatibility.md#library-formats)
-3. On the machine that will run the import, install Node.js 24 or later and configure a signed-in `gcloud` account. Install ImageMagick 7 (`magick`) to generate image thumbnails. Add `--no-thumbnails` to import originals and metadata without generating new previews. [CLI option reference](library-compatibility.md#flickr-importer-cli)
+3. On the machine that will run the import, install Node.js 24 or later and configure a signed-in `gcloud` account. The importer exchanges its token for one scoped to the selected library prefix. Install ImageMagick 7 (`magick`) to generate image thumbnails. Add `--no-thumbnails` to import originals and metadata without generating new previews. [CLI option reference](library-compatibility.md#flickr-importer-cli)
 4. Install the dependencies from the repository root.
 
    ```sh

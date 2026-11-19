@@ -81,6 +81,33 @@ function boundedStream(stream, maximum, code, signal) {
 async function boundedBlob(stream, maximum, code, signal) {
   return new Response(boundedStream(stream,maximum,code,signal)).blob();
 }
+function streamStagedObject({body,dispose}) {
+  const reader = body.stream().getReader();
+  return new ReadableStream({
+    async pull(controller) {
+      let chunk;
+      try {
+        chunk = await reader.read();
+      } catch (error) {
+        await dispose();
+        throw error;
+      }
+      if (chunk.done) {
+        await dispose();
+        controller.close();
+      } else {
+        controller.enqueue(chunk.value);
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        await dispose();
+      }
+    },
+  });
+}
 async function compressed(value) {
   const json = new Blob([canonical(value)]);
   check(json.size <= MAX_SNAPSHOT);
@@ -379,10 +406,10 @@ function protectSource(source, old) {
   }
 }
 
-export function createFlickrRepository(store, {prefix = 'library', uploadConcurrency = 16, stageUpload} = {}) {
+export function createFlickrRepository(store, {prefix = 'library', uploadConcurrency = 16, stageLargeObject} = {}) {
   check(pathSegments(prefix), 'invalidReference');
   const pinned = new Map();
-  const get = (key, signal, maxBytes) => store.get(prefix + '/' + key, {signal,maxBytes});
+  const get = (key, signal, maxBytes) => store.get(prefix + '/' + key, {signal,maxBytes,stageBody:stageLargeObject});
   const put = (key, blob, match, signal) => store.put(prefix + '/' + key, blob, {match, signal});
 
   async function getReferencedObject(key, signal, byteLength) {
@@ -401,8 +428,12 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
       if (![403,412].includes(error.status)) throw error;
       const existing = await getReferencedObject(key,signal,blob.size);
       if (!existing && error.status === 403) throw error;
-      check(existing && existing.body.size === blob.size && await digest(existing.body) === sha,'integrity');
-      return {generation:existing.generation};
+      try {
+        check(existing && existing.body.size === blob.size && await digest(existing.body) === sha,'integrity');
+        return {generation:existing.generation};
+      } finally {
+        await existing?.dispose?.();
+      }
     }
   }
   async function saveSnapshot(directory, value, signal) {
@@ -418,10 +449,14 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
   }
   async function loadJson(ref, gzip, signal) {
     const data = await get(ref.key,signal,ref.byteLength);
-    check(data && data.body.size === ref.byteLength && await digest(data.body) === ref.sha256,'corrupt');
-    const value = await readJson(data.body,gzip,signal);
-    version(value);
-    return value;
+    try {
+      check(data && data.body.size === ref.byteLength && await digest(data.body) === ref.sha256,'corrupt');
+      const value = await readJson(data.body,gzip,signal);
+      version(value);
+      return value;
+    } finally {
+      await data?.dispose?.();
+    }
   }
   async function observe(signal) {
     signal?.throwIfAborted();
@@ -488,14 +523,18 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
     } catch (error) { fail(errorCode(error)); }
   }
   async function openImportObject(baseToken,ref,signal) {
+    let stored;
     try {
       const pin = pinned.get(baseToken);
       check(pin && validRef(ref,ref?.kind,pin.key) && pin.refs.has(canonical(ref)),'invalidReference');
-      const stored = await getReferencedObject(ref.key,signal,ref.byteLength);
+      stored = await getReferencedObject(ref.key,signal,ref.byteLength);
       check(stored && (!ref.observedVersion || ref.observedVersion === stored.generation) &&
         stored.body.size === ref.byteLength && await digest(stored.body) === ref.sha256,'integrity');
-      return stored.body.stream();
-    } catch (error) { fail(errorCode(error)); }
+      return stored.dispose ? streamStagedObject(stored) : stored.body.stream();
+    } catch (error) {
+      await stored?.dispose?.();
+      fail(errorCode(error));
+    }
   }
   async function listFlickrSources(signal) {
     try {
@@ -509,8 +548,8 @@ export function createFlickrRepository(store, {prefix = 'library', uploadConcurr
       let blob;
       try {
         const bytes = boundedStream(await upload.openBytes(signal),upload.byteLength,'integrity',signal);
-        staged = stageUpload && upload.byteLength > 16 * 1024 ** 2
-          ? await stageUpload(bytes,ref.mimeType,signal) : undefined;
+        staged = stageLargeObject && upload.byteLength > 16 * 1024 ** 2
+          ? await stageLargeObject(bytes,ref.mimeType,signal) : undefined;
         blob = staged?.body ?? await new Response(bytes).blob();
       } catch (error) {
         if (error.code === 'integrity' || errorCode(error) === 'aborted') throw error;

@@ -130,3 +130,41 @@ test('resumes a conditional large upload from the byte offset GCS reports', asyn
     'bytes 4194304-12582911/17825792', 'bytes 12582912-17825791/17825792',
   ])
 })
+
+test('can stage a large verified response on disk and release it after the read', async t => {
+  const { createWriteStream, openAsBlob } = await import('node:fs')
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { Readable } = await import('node:stream')
+  const { pipeline } = await import('node:stream/promises')
+  const directory = await mkdtemp(join(tmpdir(), 'minnelux-gcs-fixture-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const path = join(directory, 'object')
+  const size = 17 * 1024 ** 2
+  let remaining = size
+  const store = createGcsStore('minnelux-test', () => 'synthetic', {
+    fetch: async url => {
+      if (!url.searchParams.has('alt')) return Response.json({ generation: '9', size: String(size) })
+      return new Response(new ReadableStream({
+        pull(controller) {
+          if (!remaining) return controller.close()
+          const chunk = new Uint8Array(Math.min(remaining, 1024 ** 2)).fill(42)
+          remaining -= chunk.length
+          controller.enqueue(chunk)
+        },
+      }), { headers: { 'Content-Type': 'application/octet-stream' } })
+    },
+  })
+  const object = await store.get('library/originals/fixture', {
+    maxBytes: size,
+    stageBody: async (bytes, type) => {
+      await pipeline(Readable.fromWeb(bytes), createWriteStream(path))
+      return { body: await openAsBlob(path, { type }), dispose: () => rm(path) }
+    },
+  })
+  assert.equal(object.generation, '9')
+  assert.equal(object.body.size, size)
+  assert.deepEqual(await object.body.slice(-2).bytes(), new Uint8Array([42, 42]))
+  await object.dispose()
+})

@@ -1,4 +1,5 @@
 const resumableChunkBytes = 8 * 1024 ** 2
+const largeObjectBytes = 2 * resumableChunkBytes
 const maxObjectBytes = 1024 ** 3
 const storageOrigin = 'https://storage.googleapis.com'
 const generationPattern = /^\d+$/
@@ -31,7 +32,7 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
   return {
     libraryId: `gs://${bucket}`,
 
-    async get(key, { signal, maxBytes = maxObjectBytes } = {}) {
+    async get(key, { signal, maxBytes = maxObjectBytes, stageBody } = {}) {
       const url = new URL(`/storage/v1/b/${encodedBucket}/o/${encodeURIComponent(key)}`, storageOrigin)
       url.searchParams.set('fields', 'generation,size')
       const metadata = await send(url, {}, signal)
@@ -54,10 +55,15 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
           controller.enqueue(chunk)
         },
       }), { signal })
-      const headers = { 'Content-Type': media.headers.get('Content-Type') ?? '' }
-      const body = await new Response(measured, { headers }).blob()
-      if (received !== expectedSize) throw corruptSize('Cloud Storage object size did not match metadata')
-      return { body, generation }
+      const contentType = media.headers.get('Content-Type') ?? ''
+      const staged = stageBody && measured && expectedSize > largeObjectBytes
+        ? await stageBody(measured, contentType, signal) : undefined
+      const body = staged?.body ?? await new Response(measured, { headers: { 'Content-Type': contentType } }).blob()
+      if (received !== expectedSize) {
+        await staged?.dispose()
+        throw corruptSize('Cloud Storage object size did not match metadata')
+      }
+      return { body, generation, ...(staged && { dispose: staged.dispose }) }
     },
 
     async put(key, body, { match, signal } = {}) {
@@ -65,7 +71,7 @@ export function createGcsStore(bucket, getToken, { fetch: request = globalThis.f
         throw new TypeError('Cloud Storage writes require a generation precondition')
       }
       const url = new URL(`/upload/storage/v1/b/${encodedBucket}/o`, storageOrigin)
-      if (resumable && body.size > 2 * resumableChunkBytes) {
+      if (resumable && body.size > largeObjectBytes) {
         url.search = new URLSearchParams({ uploadType: 'resumable', ifGenerationMatch: match, fields: 'generation' })
         const response = await send(url, {
           method: 'POST',

@@ -67,3 +67,14 @@ test('the executable exposes its usage without contacting Google Cloud', () => {
   const output = execFileSync(process.execPath, ['cli.mjs', '--help'], { cwd: new URL('.', import.meta.url), encoding: 'utf8' })
   assert.match(output, /--bucket .+--source/)
 })
+
+test('reports an unreadable ZIP without disclosing the supplied path', () => {
+  const privateFilename = 'synthetic-private-flickr-archive.zip'
+  const result = spawnSync(process.execPath, [
+    'cli.mjs', '--bucket', 'fixture-bucket', '--source', 'fixture',
+    '--account', 'fixture', '--no-thumbnails', '--', privateFilename,
+  ], { cwd: new URL('.', import.meta.url), encoding: 'utf8' })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Could not read ZIP 1/)
+  assert.ok(!result.stderr.includes(privateFilename))
+})
