@@ -8,6 +8,6 @@ Use synthetic media and metadata in tests and examples. Run `gitleaks git --reda
 
 ## Frontend security
 
-- Keep live credentials out of source, build configuration, browser storage, and logs. Keep short-lived access tokens in memory and request the narrowest provider scopes and permissions needed.
+- Keep live credentials out of source, build configuration, and logs. Keep credentials in memory by default. With **Remember login** enabled, the web client may save one short-lived Google Cloud Storage access token and its connection in IndexedDB. Request the narrowest provider scopes and permissions needed. [Browser storage contract](docs/dev/web-client/SPEC.md#session-and-worker-messages)
 - Validate imported data and provider responses at runtime. Render filenames, metadata, and other untrusted values as text. Preserve the deployment's Content Security Policy when adding browser capabilities.
 - When adding an npm dependency, commit the lockfile and use `npm ci` in CI so the dependency graph reflects reproducible installs.

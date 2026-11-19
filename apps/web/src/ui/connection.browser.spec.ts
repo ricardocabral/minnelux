@@ -13,6 +13,7 @@ test('opens with Google Cloud Storage and shows Amazon-specific settings when se
   await expect(page.getByLabel('AWS region')).toBeVisible()
   await expect(page.getByLabel('Cognito identity pool ID')).toBeVisible()
   await expect(page.getByLabel('Google OAuth client ID')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: 'Remember login' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Connect to Amazon S3' })).toBeVisible()
 
   await provider.selectOption('gcs')

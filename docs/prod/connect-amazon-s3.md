@@ -1,6 +1,6 @@
 # Connect a private Amazon S3 library
 
-Use the self-hosted static web build to connect through Cognito. Use the optional session server for Google libraries. [Static web build instructions](../../apps/web/README.md#self-host-the-web-client)
+Use the self-hosted static web build to connect through Cognito. [Static web build instructions](../../apps/web/README.md#self-host-the-web-client)
 
 ## Set up the bucket and sign-in
 

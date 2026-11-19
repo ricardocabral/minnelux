@@ -17,8 +17,7 @@ export default defineConfig(({ mode }) => ({
       replacement: require.resolve('@aws-sdk/xml-builder'),
     }],
   },
-  build: { outDir: mode === 'test' ? 'dist-test' : mode === 'session-test' ? 'dist-session-test' : 'dist' },
-  ...(mode === 'session-test' && { define: { 'import.meta.env.VITE_DURABLE_GCS_SESSION': '"1"' } }),
+  build: { outDir: mode === 'test' ? 'dist-test' : 'dist' },
   plugins: mode === 'test' ? [{
     name: 'minnelux-browser-fixture',
     async configurePreviewServer(server) {

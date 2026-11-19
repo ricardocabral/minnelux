@@ -8,9 +8,7 @@
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
-    "test:browser": "playwright test",
-    "serve:session": "node session/server.mjs",
-    "test:session": "node --test session/*.test.mjs && vite build --mode session-test && playwright test --config playwright.session.config.ts"
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "3.1171.0",

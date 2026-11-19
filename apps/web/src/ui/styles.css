@@ -163,8 +163,14 @@ dialog::backdrop { background: #0b2118a1; }
 .connect-main > p { color: var(--muted); line-height: 1.5; }
 .connect-form { display: grid; width: 100%; gap: 14px; }
 .connect-form label { display: grid; gap: 5px; }
-.connect-form input, .connect-form select { appearance: auto; min-height: 42px; width: 100%; padding: 8px; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; background: var(--paper); }
+.connect-form input:not([type=checkbox]), .connect-form select { appearance: auto; min-height: 42px; width: 100%; padding: 8px; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; background: var(--paper); }
 .connect-form .control { justify-self: start; }
+.remember-login { position: relative; display: flex; align-items: center; gap: 6px; }
+.remember-login label { display: flex; align-items: center; gap: 8px; }
+.remember-login input { width: 17px; height: 17px; margin: 0; accent-color: var(--forest); }
+.remember-help { width: 26px; height: 26px; padding: 0; color: var(--muted); border: 1px solid var(--line); border-radius: 50%; background: var(--paper); cursor: help; }
+.remember-login [role=tooltip] { display: none; position: absolute; z-index: 1; inset: auto auto calc(100% - 2px) 0; max-width: min(330px, 100%); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font-size: .88rem; }
+.remember-login:has(.remember-help:is(:hover, :focus)) [role=tooltip], .remember-login [role=tooltip]:hover { display: block; }
 .connect-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .sidebar { min-width: 0; }
 .sidebar-inner { max-height: calc(100vh - 130px); padding: 3px; margin: -3px; overflow: auto; }

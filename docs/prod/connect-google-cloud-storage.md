@@ -10,7 +10,7 @@ Configure a private bucket and Google sign-in for the [web client](../../apps/we
 
 ## Open the library
 
-Enter the bucket name, library prefix, and public Google OAuth client ID in the app. In the web client, choose **Read only** or **Read and edit** and connect to **Google Cloud Storage**. In the importer, use the [Flickr workflow](../../apps/flickr-import/README.md#import-a-flickr-export). For a self-hosted client that restores sign-in on reload, use the [session-server setup](../../apps/web/README.md#stay-connected-across-reloads).
+Enter the bucket name, library prefix, and public Google OAuth client ID in the app. In the web client, choose **Read only** or **Read and edit** and connect to **Google Cloud Storage**. Select **Remember login** in the web client if you want the library to reopen on reload while the current token is valid. Use it only in a trusted browser. In the importer, follow the Flickr workflow. [Remember a Google Cloud Storage login](../../apps/web/README.md#stay-connected-across-reloads) · [Flickr workflow](../../apps/flickr-import/README.md#import-a-flickr-export)
 
 To verify access, open a known photo in an existing library. For a new library, try publishing a synthetic JPEG from the web client's **Import** dialog in a test prefix, then reopen it and search for the photo. The [compatibility reference](library-compatibility.md#library-formats) explains which prefix to use if you use both apps.
 

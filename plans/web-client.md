@@ -8,7 +8,7 @@ Deliver a static browser client that opens, edits, searches, and plays a private
 
 - React 19, strict TypeScript, and Vite. Generic hash routes for connection, gallery, import, and viewer. Keep private view state in memory.
 - Plain TypeScript library worker for catalog, search, and publication. A separate on-demand import worker handles expensive work. The service worker handles tab-bound video ranges.
-- Direct provider-managed identity and object storage. The provider's conditional head write commits a revision of immutable objects. Keep published state in the bucket and only non-secret connection settings in browser persistence.
+- Direct provider-managed identity and object storage. The provider's conditional head write commits a revision of immutable objects. Keep published state in the bucket. Limit browser persistence to non-secret connection settings and the opt-in Google Cloud Storage login. [Web client session contract](../docs/dev/web-client/SPEC.md#session-and-worker-messages)
 - Retain the existing Node contract test approach. Use Playwright against the built SPA with synthetic data and real worker APIs. Use deployed HTTPS and real private test buckets for provider and browser release evidence.
 
 Base implementation worktrees on the current agreed main revision. Use the [standalone Flickr importer](../apps/flickr-import/README.md) and its generated revisions for reuse and compatibility testing.

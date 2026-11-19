@@ -14,7 +14,7 @@ flowchart LR
 
 The HTTPS host serves the app files. Signing in gives the browser short-lived credentials. Your storage provider uses those credentials and the bucket owner's permissions to decide whether a request can read or write library data.
 
-With saved Google sessions, a server on the app's origin handles sign-in and token renewal so the browser can reopen the library after a reload. Library and media requests go directly from the browser to Google Cloud Storage. [Google session setup](../../apps/web/README.md#stay-connected-across-reloads)
+With **Remember login** selected, the web client saves a short-lived Google Cloud Storage token and its library connection in the browser's IndexedDB. Reloading the same site in the same browser profile can reopen the library while the token is valid. A new Google token requires another sign-in action. [Remember a Google Cloud Storage login](../../apps/web/README.md#stay-connected-across-reloads)
 
 The diagram includes the design for private video playback. The route is bound to the tab that opened the video and requests byte ranges so the player can seek. The GCS browser proof demonstrates this path. [GCS browser proof](../../spikes/gcs/README.md) · [Current viewer support](library-compatibility.md#library-formats)
 
