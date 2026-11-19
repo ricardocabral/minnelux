@@ -61,9 +61,10 @@ resources before changing them. Reuse resources that already match.
 1. Read AGENTS.md, .agents/skills/minnelux/SKILL.md,
    docs/prod/connect-google-cloud-storage.md, and apps/web/README.md.
 2. Use a private GCS bucket with uniform bucket-level access and public
-   access prevention. Grant readers Storage Object Viewer. Add Storage
-   Object Creator for editors and grant storage.objects.delete only on the
-   exact <LIBRARY_PREFIX>/head.json object so editors can advance the head.
+   access prevention. Grant Storage Object Viewer to both viewers and
+   editors. Add Storage Object Creator for editors and grant
+   storage.objects.delete only on the exact <LIBRARY_PREFIX>/head.json
+   object so editors can advance the head.
    Check inherited access before relying on the viewer/editor split.
 3. If deploying the app, build the regular apps/web/dist/ using Node.js 24
    or later and serve the static files over HTTPS with the documented
@@ -78,10 +79,10 @@ resources before changing them. Reuse resources that already match.
 5. Give me the URL, bucket, prefix, and public OAuth client ID. Have me
    complete Google sign-in in the browser. Open a known photo in Read only
    mode for an existing library. For a new write-enabled setup, use an
-   isolated test prefix with equivalent scoped permissions. Publish a
-   synthetic JPEG, make a second edit to exercise head replacement, and
-   reconnect to check that the photo opens and is searchable. Report
-   what you verified.
+   isolated test prefix with equivalent scoped permissions. Connect as an
+   editor in Read and edit mode. Publish a synthetic JPEG, make a second
+   edit to exercise head replacement, and reconnect to check that the
+   photo opens and is searchable. Report what you verified.
 ```
 
 ## Set up on AWS
@@ -167,8 +168,11 @@ the source files untouched.
    references in the catalog. Use the repository to generate the gzip
    catalog and text/tag indexes and the v2 revision manifest. Write
    immutable objects first and publish via a conditional head.json update.
-   Preserve existing entries. Reuse the same operation ID on retry and
-   check its receipt before replaying an uncertain write.
+   Preserve existing entries. Keep a distinct operation ID for each
+   confirmed import intent and reuse it only for that intent's retry.
+   Reconcile uncertain writes through the repository. If the head advanced
+   and the repository cannot find a matching receipt, stop and report that
+   the outcome is unknown.
 4. Reopen the library in a fresh authorized browser session. Search for
    representative imported photos, open their previews, and compare a
    downloaded original with its source SHA-256. Report the revision ID,
