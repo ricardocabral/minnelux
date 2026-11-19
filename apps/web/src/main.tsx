@@ -17,7 +17,7 @@ let active: {
 let connecting: AbortController | undefined
 let connectionNotice: string | undefined
 let checkingConnection = true
-let retryForget: (() => void) | undefined
+let removeSavedLogin: (() => void) | undefined
 
 function disconnect(notice?: string) {
   connectionNotice = notice
@@ -29,7 +29,7 @@ function disconnect(notice?: string) {
 
 async function forgetAndDisconnect(rememberedId: string, notice?: string) {
   checkingConnection = true
-  retryForget = undefined
+  removeSavedLogin = undefined
   disconnect(notice ?? 'Removing saved login…')
   try {
     await forgetGoogleLogin(rememberedId)
@@ -37,7 +37,7 @@ async function forgetAndDisconnect(rememberedId: string, notice?: string) {
   } catch {
     const failure = 'The browser could not remove the saved login. Try again.'
     connectionNotice = notice ? notice + ' ' + failure : failure
-    retryForget = () => void forgetAndDisconnect(rememberedId, notice)
+    removeSavedLogin = () => void forgetAndDisconnect(rememberedId, notice)
   } finally {
     checkingConnection = false
     render()
@@ -49,16 +49,23 @@ function closeConnection(notice?: string) {
   else disconnect(notice)
 }
 
-function connectionLost(notice: string) {
+function connectionLost(notice: string, preserveLogin = false) {
   const pending = active?.client.hasUnconfirmedPublication()
-  closeConnection(pending ? notice + ' A publication may have succeeded. Check the library before importing the photo again.' : notice)
+  const publication = pending ? ' A publication may have succeeded. Check the library before importing the photo again.' : ''
+  const rememberedId = active?.rememberedId
+  if (preserveLogin && rememberedId) {
+    removeSavedLogin = () => void forgetAndDisconnect(rememberedId)
+    disconnect(notice + ' Reload to reconnect, or remove the saved login.' + publication)
+  } else {
+    closeConnection(notice + ' Connect again.' + publication)
+  }
 }
 
 function start(source: WorkerStart['source'], close: () => void = () => {}, rememberedId?: string) {
   const id = crypto.randomUUID()
   const worker = new Worker(new URL('./library/worker.ts', import.meta.url), { type: 'module' })
   const client = connectLibraryClient(worker, id, () => {
-    if (active?.id === id) connectionLost('The session expired. Connect again.')
+    if (active?.id === id) connectionLost('The session expired.')
   })
   try {
     worker.postMessage({ kind: 'start', version: libraryProtocolVersion, sessionId: id, source } satisfies WorkerStart)
@@ -77,14 +84,14 @@ function start(source: WorkerStart['source'], close: () => void = () => {}, reme
     },
   }
   worker.addEventListener('error', () => {
-    if (active?.id === id) connectionLost('The library process stopped. Connect again.')
+    if (active?.id === id) connectionLost('The library process stopped.', true)
   }, { once: true })
   render()
 }
 
 function startAuthorized(source: AuthorizedLibrarySource, closeSession?: () => void, rememberedId?: string) {
   const expiry = setTimeout(
-    () => connectionLost('The session expired. Connect again.'),
+    () => connectionLost('The session expired.'),
     Math.max(0, source.expiresAt - Date.now()),
   )
   function close() {
@@ -145,7 +152,7 @@ function render() {
     client={active?.client}
     isFixture={active?.kind === 'sample'}
     checkingConnection={checkingConnection}
-    onRetryForget={retryForget}
+    onRemoveSavedLogin={removeSavedLogin}
     onConnect={connect}
     onCancelConnect={() => connecting?.abort()}
     onOpenFixture={import.meta.env.MODE === 'test' ? () => {

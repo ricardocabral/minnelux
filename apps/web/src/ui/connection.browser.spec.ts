@@ -7,17 +7,18 @@ test('opens with Google Cloud Storage and shows Amazon-specific settings when se
   await expect(page.getByRole('heading', { name: 'Open your library' })).toBeVisible()
   const provider = page.getByLabel('Storage provider')
   await expect(provider).toHaveValue('gcs')
-  await expect(page.getByLabel('Google OAuth client ID')).toBeVisible()
+  await page.getByLabel('Google OAuth client ID').fill('example.apps.googleusercontent.com')
 
   await provider.selectOption('s3')
-  await expect(page.getByLabel('AWS region')).toBeVisible()
+  await expect(page.getByLabel('AWS region')).toHaveValue('')
+  await page.getByLabel('AWS region').fill('us-east-2')
   await expect(page.getByLabel('Cognito identity pool ID')).toBeVisible()
   await expect(page.getByLabel('Google OAuth client ID')).toHaveCount(0)
   await expect(page.getByRole('checkbox', { name: 'Remember login' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Connect to Amazon S3' })).toBeVisible()
 
   await provider.selectOption('gcs')
-  await expect(page.getByLabel('Google OAuth client ID')).toBeVisible()
+  await expect(page.getByLabel('Google OAuth client ID')).toHaveValue('')
   await expect(page.getByRole('button', { name: 'Connect to Google Cloud Storage' })).toBeVisible()
 })
 

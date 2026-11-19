@@ -17,7 +17,7 @@ type AppProps = {
   isFixture?: boolean
   connectionNotice?: string
   checkingConnection?: boolean
-  onRetryForget?: () => void
+  onRemoveSavedLogin?: () => void
   onConnect?: (configuration: ConnectionSettings, rememberLogin: boolean) => Promise<void>
   onCancelConnect?: () => void
   onOpenFixture?: () => void
@@ -33,14 +33,14 @@ const connectionMessages = new Map<string, ConnectionFeedback>([
   ['invalidBucket', { text: 'Enter a valid S3 bucket name.', role: 'alert' }],
 ])
 
-export default function AppView({ client, isFixture, connectionNotice, checkingConnection, onRetryForget, onConnect, onCancelConnect, onOpenFixture, onDisconnect }: AppProps) {
+export default function AppView({ client, isFixture, connectionNotice, checkingConnection, onRemoveSavedLogin, onConnect, onCancelConnect, onOpenFixture, onDisconnect }: AppProps) {
   return client ? <ConnectedLibrary client={client} isFixture={isFixture} connectionNotice={connectionNotice} onDisconnect={onDisconnect} />
     : <Connect connectionNotice={connectionNotice} checkingConnection={checkingConnection}
-      onRetryForget={onRetryForget} onConnect={onConnect} onCancelConnect={onCancelConnect} onOpenFixture={onOpenFixture} />
+      onRemoveSavedLogin={onRemoveSavedLogin} onConnect={onConnect} onCancelConnect={onCancelConnect} onOpenFixture={onOpenFixture} />
 }
 
-function Connect({ connectionNotice, checkingConnection, onRetryForget, onConnect, onCancelConnect, onOpenFixture }: Pick<AppProps,
-  'connectionNotice' | 'checkingConnection' | 'onRetryForget' | 'onConnect' | 'onCancelConnect' | 'onOpenFixture'
+function Connect({ connectionNotice, checkingConnection, onRemoveSavedLogin, onConnect, onCancelConnect, onOpenFixture }: Pick<AppProps,
+  'connectionNotice' | 'checkingConnection' | 'onRemoveSavedLogin' | 'onConnect' | 'onCancelConnect' | 'onOpenFixture'
 >) {
   const { pathname } = useLocation()
   const [provider, setProvider] = useState<ConnectionSettings['provider']>('gcs')
@@ -85,7 +85,7 @@ function Connect({ connectionNotice, checkingConnection, onRetryForget, onConnec
       <h1>Open your library</h1>
       {connectionNotice ? <p role="status">{connectionNotice}</p> : null}
       {checkingConnection ? (!connectionNotice ? <p role="status">Checking for a saved connection…</p> : null)
-      : onRetryForget ? <button type="button" className="control primary" onClick={onRetryForget}>Retry removing saved login</button>
+      : onRemoveSavedLogin ? <button type="button" className="control primary" onClick={onRemoveSavedLogin}>Remove saved login</button>
       : onConnect ? <>
         <form className="connect-form" onSubmit={event => void connect(event)} aria-busy={pending}>
           <label>Storage provider
@@ -100,7 +100,7 @@ function Connect({ connectionNotice, checkingConnection, onRetryForget, onConnec
           <label>Bucket name <input name="bucket" required autoComplete="off" disabled={pending} /></label>
           <label>Library prefix <input name="prefix" autoComplete="off" disabled={pending} /></label>
           {provider === 'gcs' ? <>
-            <label>Google OAuth client ID <input name="googleClientId" required autoComplete="off" disabled={pending} /></label>
+            <label>Google OAuth client ID <input key="googleClientId" name="googleClientId" required autoComplete="off" disabled={pending} /></label>
             <label>Access
               <select name="access" disabled={pending}>
                 <option value="read">Read only</option>
@@ -130,7 +130,7 @@ function Connect({ connectionNotice, checkingConnection, onRetryForget, onConnec
           {feedback ? <p role={feedback.role} className={feedback.role === 'alert' ? 'form-error' : undefined}>{feedback.text}</p> : null}
         </form>
       </> : <p>Storage connections are unavailable in this build.</p>}
-      {onOpenFixture && !checkingConnection && !onRetryForget ? <div className="connect-footer">
+      {onOpenFixture && !checkingConnection && !onRemoveSavedLogin ? <div className="connect-footer">
         <button type="button" className={onConnect ? 'control' : 'control primary'} onClick={onOpenFixture} disabled={pending}>
           Open sample library
         </button>

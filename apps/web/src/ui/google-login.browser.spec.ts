@@ -138,6 +138,23 @@ test('clears a remembered token after Cloud Storage rejects it', async ({ page, 
   expect(google.storageReads).toBe(reads)
 })
 
+test('keeps a remembered login after a transient worker load failure', async ({ page, context }) => {
+  const google = await mockGoogle(context)
+  await openGoogleForm(page)
+  await page.getByRole('checkbox', { name: 'Remember login' }).check()
+  await connectGoogle(page)
+
+  const libraryWorker = /\/assets\/worker-[^/]+\.js$/
+  await page.route(libraryWorker, route => route.abort())
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Remove saved login' })).toBeVisible()
+
+  await page.unroute(libraryWorker)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Open Forêt', exact: true }).locator('img')).toHaveAttribute('src', /^blob:/)
+  expect(google.signIns).toBe(1)
+})
+
 test('opens the library for this page if browser storage is unavailable', async ({ page, context }) => {
   await mockGoogle(context)
   await page.addInitScript(() => {

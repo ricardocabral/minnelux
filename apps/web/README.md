@@ -24,7 +24,7 @@ Open your deployed URL, connect using a private test bucket, and verify that you
 
 ## Stay connected across reloads
 
-Select **Remember login** before connecting to Google Cloud Storage. The checkbox starts unchecked. Once the library opens, Minnelux saves one short-lived Google access token and its library connection in this browser's site data. Reload the same site in the same browser profile while the token is valid to reopen the library.
+Select **Remember login** before connecting to Google Cloud Storage. The checkbox starts unchecked. When Google authorizes the connection, Minnelux saves one short-lived Google access token and its library connection in this browser's site data. Reload the same site in the same browser profile while the token is valid to reopen the library.
 
 Use **Remember login** only in a trusted browser. Scripts running on the app's origin can read the saved token. When Minnelux detects that the token expired or Google rejects it, connect again to get a new token. Choose **Disconnect** to remove the saved login, or clear the site's browser data. [Google Cloud Storage setup](../../docs/prod/connect-google-cloud-storage.md)
 
