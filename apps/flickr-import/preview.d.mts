@@ -1,3 +1,7 @@
+export const maxPreviewBytes: number
+export const previewImageTypes: ReadonlySet<string>
+export function readPreviewImage(blob: Blob, type: string): Promise<{ width: number; height: number; orientation?: number } | undefined>
+
 export function makePreview(
   original: {
     mimeType: string

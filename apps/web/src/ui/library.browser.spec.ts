@@ -66,6 +66,16 @@ test('shows the preview while the viewer loads the photo original', async ({ pag
   const originalReady = new Promise<void>(resolve => { releaseOriginal = resolve })
   let releaseNavigation!: () => void
   const navigationReady = new Promise<void>(resolve => { releaseNavigation = resolve })
+  let viewerOpened = false
+  let releaseViewerPreviews!: () => void
+  const viewerPreviewsReady = new Promise<void>(resolve => { releaseViewerPreviews = resolve })
+  await context.route(
+    url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/previews/')),
+    async route => {
+      if (viewerOpened) await viewerPreviewsReady
+      await route.continue()
+    },
+  )
   await context.route(
     url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/originals/')),
     async route => {
@@ -79,14 +89,15 @@ test('shows the preview while the viewer loads the photo original', async ({ pag
     await page.goto('/')
     await page.getByRole('button', { name: 'Open sample library' }).click()
     const tile = page.getByRole('button', { name: 'Open Forêt' })
-    await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/)
+    const tileImage = tile.locator('img')
+    await expect.poll(() => tileImage.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0)
+    const previewUrl = await tileImage.getAttribute('src')
     expect(originalReads).toBe(0)
+    viewerOpened = true
     await tile.click()
 
     const viewer = page.getByRole('dialog', { name: 'Forêt' })
     const image = viewer.getByRole('img', { name: 'Forêt' })
-    await expect(image).toHaveAttribute('src', /^blob:/)
-    const previewUrl = await image.getAttribute('src')
     await expect.poll(() => originalReads).toBe(1)
     await expect(image).toHaveAttribute('src', previewUrl!)
     releaseOriginal()
@@ -104,11 +115,11 @@ test('shows the preview while the viewer loads the photo original', async ({ pag
     await page.getByRole('dialog').getByRole('button', { name: 'Next item' }).click()
     await expect.poll(() => originalReads).toBe(3)
     const returnedImage = page.getByRole('dialog', { name: 'Forêt' }).getByRole('img', { name: 'Forêt' })
-    await expect(returnedImage).toHaveAttribute('src', /^blob:/)
-    await expect(returnedImage).not.toHaveAttribute('src', originalUrl!)
+    await expect(returnedImage).toHaveAttribute('src', previewUrl!)
   } finally {
     releaseOriginal()
     releaseNavigation()
+    releaseViewerPreviews()
   }
 })
 
