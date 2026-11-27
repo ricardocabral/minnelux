@@ -2,8 +2,6 @@ import { maxPreviewBytes, previewImageTypes, readPreviewImage } from '../../../f
 import type { StoredObjectRef } from './contract.ts'
 import type { LibraryClient } from './worker-contract.ts'
 
-const otherPhotoTypes = new Set(['image/avif', 'image/heic', 'image/heif', 'image/tiff'])
-
 export type DecodedPhoto = { url: string; width: number; height: number }
 
 export function loadPhotoOriginal(client: Pick<LibraryClient, 'readOriginal'>, handle: string, photo: {
@@ -24,11 +22,10 @@ export function loadPhotoOriginal(client: Pick<LibraryClient, 'readOriginal'>, h
 
   async function load(): Promise<DecodedPhoto | undefined> {
     const { byteLength, mimeType } = photo.original
-    const hasHeaderCheck = previewImageTypes.has(mimeType)
-    if (byteLength > maxPreviewBytes || (!hasHeaderCheck && !otherPhotoTypes.has(mimeType))) return undefined
+    if (byteLength > maxPreviewBytes || !previewImageTypes.has(mimeType)) return undefined
 
     const blob = await client.readOriginal(handle, photo.id, signal)
-    if (hasHeaderCheck && !await readPreviewImage(blob, mimeType)) return undefined
+    if (!await readPreviewImage(blob, mimeType)) return undefined
     signal.throwIfAborted()
     url = URL.createObjectURL(blob)
     image = new Image()

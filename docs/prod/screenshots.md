@@ -50,7 +50,7 @@ The **Videos** switch limits the current collection or search to video items. In
 
 ### Photo viewer
 
-The viewer shows a preview while the full-resolution photo loads. You can zoom into the photo and step through the current gallery or search results. For originals larger than 48 MiB, the viewer shows the saved preview. Use **Download original** to save the source file.
+The viewer shows a preview while the full-resolution photo loads. You can zoom into the photo and step through the current gallery or search results. For originals the viewer cannot display, including files larger than 48 MiB, it shows a saved preview when available. Use **Download original** to save the source file.
 
 [![Photo viewer showing a lake reflection with zoom and download controls](../screenshots/photo-viewer.webp)](../screenshots/photo-viewer.webp)
 
