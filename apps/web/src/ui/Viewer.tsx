@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { displayRotation } from '../../../flickr-import/preview.mjs'
 import type { AssetV1, TagV1 } from '../library/contract.ts'
 import type { AssetRow, LibraryClient, ResultHandle } from '../library/worker-contract.ts'
 import { AssetDetails } from './Details.tsx'
@@ -61,7 +62,11 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
   const mediaId = media?.id
   const hasPreview = asset ? asset.previews.length > 0 : row?.hasPreview
   const previewError = detail?.error
-  const allowZoom = media?.mediaKind === 'photo' && hasPreview
+  const isPhoto = media?.mediaKind === 'photo'
+  const original = useOriginalImage(client, result.handle, isPhoto ? mediaId : undefined)
+  const originalImage = detail ? original.image : undefined
+  const rotation = asset ? displayRotation(asset.metadata) : 0
+  const allowZoom = isPhoto && (hasPreview || originalImage)
 
   return <Modal className="viewer" titleId="viewer-title" onDismiss={onClose}>
     <header className="viewer-header" onKeyDown={keyNavigate}>
@@ -92,8 +97,9 @@ export function Viewer({ client, result, rows, label, tags, position, onStep, on
           }}
           onTouchCancel={() => { touch.current = undefined }}
         >
-          <ViewerImage key={position} client={client} id={hasPreview ? mediaId : undefined} title={title}
-            pending={!media && !previewError} onZoom={allowZoom ? toggleZoom : undefined} />
+          <ViewerImage key={JSON.stringify([result.handle, position])} client={client} previewId={hasPreview ? mediaId : undefined}
+            original={originalImage} rotation={rotation} title={title} isPhoto={isPhoto}
+            pending={(!media && !previewError) || Boolean(isPhoto && !detail) || original.loading} onZoom={allowZoom ? toggleZoom : undefined} />
         </div>
         <button type="button" className="control icon-button" aria-label="Next item" disabled={position >= result.total - 1} onClick={() => step(1)}><Icon name="right" /></button>
       </div>
@@ -176,16 +182,74 @@ function ViewerTools({ client, handle, photo, zoom, onZoom }: {
   </div>
 }
 
-function ViewerImage({ client, id, title, pending, onZoom }: {
+function useOriginalImage(client: LibraryClient, handle: string, id?: string) {
+  const [read, setRead] = useState<{
+    client: LibraryClient; handle: string; id: string; signal: AbortSignal; image?: HTMLImageElement
+  }>()
+  const active = read?.client === client && read.handle === handle && read.id === id && !read.signal.aborted ? read : undefined
+
+  useEffect(() => {
+    if (!id) return
+    const controller = new AbortController()
+    const { signal } = controller
+    let image: HTMLImageElement | undefined
+    let url: string | undefined
+
+    function releaseImage() {
+      if (url) URL.revokeObjectURL(url)
+      image?.removeAttribute('src')
+      url = undefined
+      image = undefined
+    }
+
+    async function decodeOriginal(assetId: string) {
+      const blob = await client.readOriginal(handle, assetId, signal)
+      signal.throwIfAborted()
+      url = URL.createObjectURL(blob)
+      image = new Image()
+      image.src = url
+      await image.decode()
+      return image
+    }
+
+    void decodeOriginal(id).then(image => {
+      if (!signal.aborted) setRead({ client, handle, id, signal, image })
+    }, () => {
+      releaseImage()
+      if (!signal.aborted) setRead({ client, handle, id, signal })
+    })
+
+    return () => {
+      controller.abort()
+      releaseImage()
+    }
+  }, [client, handle, id])
+
+  return { image: active?.image, loading: id !== undefined && active === undefined }
+}
+
+function ViewerImage({ client, previewId, original, rotation, title, isPhoto, pending, onZoom }: {
   client: LibraryClient
-  id?: string
+  previewId?: string
+  original?: HTMLImageElement
+  rotation: number
   title: string
+  isPhoto?: boolean
   pending: boolean
   onZoom?: () => void
 }) {
   const [failed, setFailed] = useState(false)
-  const { url, loading } = useStoredImage(client, 'preview', id)
-  if (loading || pending) return <p role="status">Loading preview…</p>
-  if (!url || failed) return <p>Preview unavailable.</p>
-  return <img alt={title} src={url} onError={() => setFailed(true)} onDoubleClick={onZoom} />
+  const { url, loading } = useStoredImage(client, 'preview', previewId)
+  if (original) {
+    const style = rotation ? { rotate: rotation + 'deg' } : undefined
+    const image = <img alt={title} src={original.src} style={style} onDoubleClick={onZoom} />
+    if (rotation % 180 === 0) return image
+    return <div className="quarter-turn" style={{
+      '--image-ratio': original.naturalHeight / original.naturalWidth,
+      '--image-width': original.naturalHeight + 'px',
+    } as CSSProperties}>{image}</div>
+  }
+  if (url && !failed) return <img alt={title} src={url} onError={() => setFailed(true)} onDoubleClick={onZoom} />
+  if (loading || pending) return <p role="status">{isPhoto ? 'Loading photo…' : 'Loading preview…'}</p>
+  return <p>{isPhoto ? 'Photo unavailable.' : 'Preview unavailable.'}</p>
 }

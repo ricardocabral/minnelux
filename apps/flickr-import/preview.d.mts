@@ -7,3 +7,5 @@ export function makePreview(
   metadata: { exifOrientation?: number; flickrRotation?: 0 | 90 | 180 | 270 },
   signal?: AbortSignal,
 ): Promise<Blob | undefined>
+
+export function displayRotation(metadata: { exifOrientation?: number; flickrRotation?: 0 | 90 | 180 | 270 }): number
