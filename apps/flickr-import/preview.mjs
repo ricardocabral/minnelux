@@ -103,22 +103,27 @@ async function drawVideo(blob, metadata, signal) {
 
 function inspectImage(type, view) {
   if (type === 'image/jpeg') return inspectJpeg(view)
-  if (type === 'image/png' && view.byteLength >= 24) {
+  if (type === 'image/png' && view.byteLength >= 24 &&
+      view.getUint32(0) === 0x89504e47 && view.getUint32(4) === 0x0d0a1a0a &&
+      view.getUint32(8) === 13 && view.getUint32(12) === 0x49484452) { // IHDR
     return { width: view.getUint32(16), height: view.getUint32(20) }
   }
-  if (type === 'image/gif' && view.byteLength >= 10) {
+  if (type === 'image/gif' && view.byteLength >= 10 && view.getUint32(0) === 0x47494638 &&
+      (view.getUint16(4) === 0x3761 || view.getUint16(4) === 0x3961)) { // GIF87a or GIF89a
     return { width: view.getUint16(6, true), height: view.getUint16(8, true) }
   }
-  if (type === 'image/webp' && view.byteLength >= 30) {
+  if (type === 'image/webp' && view.byteLength >= 30 &&
+      view.getUint32(0) === 0x52494646 && view.getUint32(8) === 0x57454250) { // RIFF and WEBP
     const chunk = view.getUint32(12)
-    if (chunk === 0x56503858) { // VP8X
+    if (chunk === 0x56503858 && view.getUint32(16, true) === 10) { // VP8X
       const length24 = (at) => view.getUint8(at) | view.getUint8(at + 1) << 8 | view.getUint8(at + 2) << 16
       return { width: length24(24) + 1, height: length24(27) + 1 }
     }
-    if (chunk === 0x56503820) { // VP8
+    if (chunk === 0x56503820 && view.getUint8(23) === 0x9d &&
+        view.getUint16(24) === 0x012a) { // VP8 key-frame signature
       return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
     }
-    if (chunk === 0x5650384c) { // VP8L
+    if (chunk === 0x5650384c && view.getUint8(20) === 0x2f) { // VP8L signature
       const dimensions = view.getUint32(21, true)
       return { width: (dimensions & 0x3fff) + 1, height: (dimensions >>> 14 & 0x3fff) + 1 }
     }

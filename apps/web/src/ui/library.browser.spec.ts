@@ -60,13 +60,76 @@ test('browses the sample collection and opens authorized Flickr details', async 
   expect(remoteMedia).toEqual([])
 })
 
+test('shows the preview while the viewer loads the photo original', async ({ page, context }) => {
+  let originalReads = 0
+  let releaseOriginal!: () => void
+  const originalReady = new Promise<void>(resolve => { releaseOriginal = resolve })
+  let releaseNavigation!: () => void
+  const navigationReady = new Promise<void>(resolve => { releaseNavigation = resolve })
+  let viewerOpened = false
+  let releaseViewerPreviews!: () => void
+  const viewerPreviewsReady = new Promise<void>(resolve => { releaseViewerPreviews = resolve })
+  await context.route(
+    url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/previews/')),
+    async route => {
+      if (viewerOpened) await viewerPreviewsReady
+      await route.continue()
+    },
+  )
+  await context.route(
+    url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/originals/')),
+    async route => {
+      originalReads++
+      await (originalReads === 1 ? originalReady : navigationReady)
+      await route.continue()
+    },
+  )
+
+  try {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Open sample library' }).click()
+    const tile = page.getByRole('button', { name: 'Open Forêt' })
+    const tileImage = tile.locator('img')
+    await expect.poll(() => tileImage.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0)
+    const previewUrl = await tileImage.getAttribute('src')
+    expect(originalReads).toBe(0)
+    viewerOpened = true
+    await tile.click()
+
+    const viewer = page.getByRole('dialog', { name: 'Forêt' })
+    const image = viewer.getByRole('img', { name: 'Forêt' })
+    await expect.poll(() => originalReads).toBe(1)
+    await expect(image).toHaveAttribute('src', previewUrl!)
+    releaseOriginal()
+
+    await expect(image).not.toHaveAttribute('src', previewUrl!)
+    const originalUrl = await image.getAttribute('src')
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0)
+    await viewer.getByRole('button', { name: 'Zoom in' }).click()
+    await expect(viewer.getByRole('button', { name: 'Fit image' })).toBeVisible()
+    await expect(image).toHaveAttribute('src', originalUrl!)
+
+    await viewer.getByRole('button', { name: 'Fit image' }).click()
+    await viewer.getByRole('button', { name: 'Previous item' }).click()
+    await expect.poll(() => originalReads).toBe(2)
+    await page.getByRole('dialog').getByRole('button', { name: 'Next item' }).click()
+    await expect.poll(() => originalReads).toBe(3)
+    const returnedImage = page.getByRole('dialog', { name: 'Forêt' }).getByRole('img', { name: 'Forêt' })
+    await expect(returnedImage).toHaveAttribute('src', previewUrl!)
+  } finally {
+    releaseOriginal()
+    releaseNavigation()
+    releaseViewerPreviews()
+  }
+})
+
 test('downloads the stored photo original from the viewer footer', async ({ page, context }) => {
   let originalReads = 0
   await context.route(
     url => url.pathname === '/__minnelux_fixture' && Boolean(url.searchParams.get('key')?.startsWith('library/originals/')),
     async route => {
       originalReads++
-      if (originalReads === 1) await route.fulfill({ status: 404 })
+      if (originalReads <= 2) await route.fulfill({ status: 404 })
       else await route.continue()
     },
   )
@@ -82,14 +145,14 @@ test('downloads the stored photo original from the viewer footer', async ({ page
 
   const downloadButton = footer.getByRole('button', { name: 'Download original' })
   await expect(downloadButton).toBeEnabled()
-  expect(originalReads).toBe(0)
+  await expect.poll(() => originalReads).toBe(1)
   await downloadButton.focus()
   await page.keyboard.press('Enter')
   await expect(footer.getByRole('alert')).toBeVisible()
   await expect(downloadButton).toBeFocused()
 
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Enter')])
-  expect(originalReads).toBe(2)
+  expect(originalReads).toBe(3)
   expect(download.suggestedFilename()).toBe('source.jpg')
   expect(await readFile(await download.path())).toEqual(await readFile(
     new URL('../../../../apps/flickr-import/test-fixtures/photo.jpg', import.meta.url),
@@ -136,11 +199,11 @@ test('publishes one photo with two tags and finds it in a fresh browser context'
 
   const base64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
-    canvas.width = 12
-    canvas.height = 8
+    canvas.width = 480
+    canvas.height = 320
     const context = canvas.getContext('2d')!
     context.fillStyle = '#a05838'
-    context.fillRect(0, 0, 12, 8)
+    context.fillRect(0, 0, canvas.width, canvas.height)
     return canvas.toDataURL('image/jpeg').split(',')[1]!
   })
   const dialog = page.getByRole('dialog', { name: 'Import media' })
@@ -162,12 +225,13 @@ test('publishes one photo with two tags and finds it in a fresh browser context'
     await fresh.getByRole('button', { name: 'Open sample library' }).click()
     const imported = fresh.getByRole('button', { name: 'Open Cafe.jpg', exact: true })
     await fresh.getByRole('searchbox', { name: 'Search photos, videos, and tags' }).fill('cafe')
-    await expect(imported).toBeVisible()
+    const thumbnail = imported.locator('img')
+    await expect.poll(() => thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(360)
     await imported.click()
     const viewer = fresh.getByRole('dialog', { name: 'Cafe.jpg' })
-    const preview = viewer.getByRole('img', { name: 'Cafe.jpg' })
-    await expect(preview).toHaveAttribute('src', /^blob:/)
-    await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(12)
+    const photo = viewer.getByRole('img', { name: 'Cafe.jpg' })
+    await expect(photo).toHaveAttribute('src', /^blob:/)
+    await expect.poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(480)
     await expect(viewer.getByRole('button', { name: 'Family', exact: true })).toBeVisible()
     await viewer.getByRole('button', { name: 'Québec', exact: true }).click()
     await expect(fresh.getByRole('heading', { name: 'Québec', exact: true })).toBeVisible()

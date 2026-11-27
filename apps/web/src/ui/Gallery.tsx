@@ -118,6 +118,7 @@ export function GalleryResults({ client, query, revisionId, scopeLabel, tags, fi
   const [loadingMore, setLoadingMore] = useState(false)
   const pageRead = useRef<AbortController | undefined>(undefined)
   const [viewerPosition, setViewerPosition] = useState<number | null>(null)
+  const [openedThumbnail, setOpenedThumbnail] = useState<{ handle: string; id: string; url: string }>()
   const origin = useRef<{ index: number; scroll: number; tile: HTMLButtonElement } | undefined>(undefined)
   const nextTag = useRef<string | undefined>(undefined)
 
@@ -202,7 +203,13 @@ export function GalleryResults({ client, query, revisionId, scopeLabel, tags, fi
   }
 
   function openViewer(event: MouseEvent<HTMLButtonElement>, index: number) {
-    origin.current = { index, scroll: window.scrollY, tile: event.currentTarget }
+    const tile = event.currentTarget
+    origin.current = { index, scroll: window.scrollY, tile }
+    const row = rows[index]
+    const image = tile.querySelector('img')
+    setOpenedThumbnail(result && row?.mediaKind === 'photo' && image?.complete && image.naturalWidth
+      ? { handle: result.handle, id: row.id, url: image.currentSrc }
+      : undefined)
     void navigate(viewerRoute)
     setViewerPosition(index)
   }
@@ -234,11 +241,13 @@ export function GalleryResults({ client, query, revisionId, scopeLabel, tags, fi
   </>
 
   function renderGallery(result: ResultHandle) {
+    const thumbnail = showingViewer && openedThumbnail?.handle === result.handle ? openedThumbnail : undefined
     return <>
       {rowGroups.size ? [...rowGroups].map(([group, items]) => <section className="collection-group" key={group}>
         <h2 className="group-title">{group}<span>{countLabel(rowGroups.size === 1 && text ? result.total : items.length, 'item')}</span></h2>
         <div className="grid">
-          {items.map(({ row, index }) => <GalleryTile key={row.id} row={row} client={client} onOpen={event => openViewer(event, index)} />)}
+          {items.map(({ row, index }) => <GalleryTile key={row.id} row={row} client={client}
+            keepPreview={thumbnail?.id === row.id} onOpen={event => openViewer(event, index)} />)}
         </div>
       </section>) : <section className="empty">
         <h2>{filtered ? 'No matches' : 'No items here yet'}</h2>
@@ -259,6 +268,7 @@ export function GalleryResults({ client, query, revisionId, scopeLabel, tags, fi
         label={title}
         tags={tags}
         position={viewerPosition}
+        thumbnail={thumbnail}
         onStep={setViewerPosition}
         onClose={closeViewer}
         onBrowseTag={id => {
@@ -270,9 +280,10 @@ export function GalleryResults({ client, query, revisionId, scopeLabel, tags, fi
   }
 }
 
-function GalleryTile({ row, client, onOpen }: {
+function GalleryTile({ row, client, keepPreview, onOpen }: {
   row: AssetRow
   client: LibraryClient
+  keepPreview: boolean
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void
 }) {
   const tile = useRef<HTMLElement>(null)
@@ -292,7 +303,7 @@ function GalleryTile({ row, client, onOpen }: {
 
   return <article className="tile" ref={tile}>
     <button type="button" className="tile-open" aria-label={`Open ${title}${video ? ', video' : ''}`} onClick={onOpen}>
-      {row.hasPreview ? visible ? <TilePreview client={client} id={row.id} /> : null
+      {row.hasPreview ? visible || keepPreview ? <TilePreview client={client} id={row.id} /> : null
         : <TilePlaceholder loading={false} />}
       <span className="caption" aria-hidden="true">{title}</span>
       {video ? <span className="clip"><Icon name="play" />Video</span> : null}
